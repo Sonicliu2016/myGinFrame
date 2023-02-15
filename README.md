@@ -1,6 +1,6 @@
 # 基于gin实现自定义框架
 
-git token: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
+git token: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
 
 go get github.com/robfig/config
 go get gorm.io/driver/mysql
