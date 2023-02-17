@@ -266,4 +266,8 @@ logs.SetLogger(logs.AdapterSlack, `{"webhookurl":"https://slack.com/xxx","level"
 
 ```go
 msg = fmt.Sprintf("%s:%d:%s", filePath, lm.LineNumber, msg)
+
+下面代码也会带链接输出
+msg := fmt.Sprintf("%s:%d:%s", "main.go", 15, "hello")
+fmt.Println(msg)
 ```

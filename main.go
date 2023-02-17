@@ -1,14 +1,24 @@
 package main
 
 import (
+	"github.com/gin-gonic/gin"
+	"io/ioutil"
 	"myGinFrame/glog"
-	"net/http"
+	"myGinFrame/router"
+	"myGinFrame/tool"
 )
 
 func main() {
-	glog.Glog.Info("我是打印信息", "11111111111111111111111111111")
-	glog.Glog.Error("我是打印信息", "2222222222222222222222222222")
-	glog.Glog.Alert("我是打印信息", "3333333333333333333333333333")
-	glog.Glog.Debug("我是打印信息", "4444444444444444444444444444")
-	http.ListenAndServe(":8080", nil)
+	gin.SetMode(gin.ReleaseMode)
+	gin.DefaultWriter = ioutil.Discard
+	gin.ForceConsoleColor()
+	app := router.InitRouter()
+	app.GET("/ping", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"message": "pong",
+		})
+	})
+	if err := app.Run(":" + tool.GetConfigStr("http_port")); err != nil {
+		glog.Glog.Error("app.Run err:", err)
+	}
 }
