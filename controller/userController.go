@@ -1,9 +1,9 @@
 package controller
 
 import (
-	"github.com/gin-gonic/gin"
+	"myGinFrame/glog"
+	"myGinFrame/model"
 	"myGinFrame/service"
-	"net/http"
 )
 
 type UserController struct {
@@ -21,46 +21,70 @@ type UserController struct {
 // @Param gender   formData string false "用户性别（0代表未填写；1代表男性；2代表女性)"
 // @Success 200 {string} Helloworld
 // @Router /user [post]
-func (c *UserController) NewUser(ctx *gin.Context) {
-	username, _ := ctx.GetPostForm("username")
-	tel, _ := ctx.GetPostForm("tel")
-	gender, _ := ctx.GetPostForm("gender")
-	err := c.Service.NewUser(username, tel, gender)
-	if err == nil {
-		ctx.JSON(http.StatusOK, gin.H{
-			"msg": "ok",
-		})
-	}
-}
-
-func (c *UserController) GetUser(ctx *gin.Context) {
-	userId, _ := c.Ctx.GetPostForm("userId")
-	u := c.Service.GetUser(userId)
-	c.Ctx.JSON(http.StatusOK, gin.H{
-		"msg":  "ok",
-		"data": u,
-	})
-}
-
-func (c *UserController) DelUser(ctx *gin.Context) {
-	userId, _ := c.Ctx.GetPostForm("userId")
-	err := c.Service.DeleteUser(userId)
-	if err == nil {
-		c.Ctx.JSON(http.StatusOK, gin.H{
-			"msg": "ok",
-		})
-	}
-}
-
-func (c *UserController) UpdateUser(ctx *gin.Context) {
-	userId, _ := c.Ctx.GetPostForm("userId")
+func (c *UserController) NewUser() error {
 	username, _ := c.Ctx.GetPostForm("username")
 	tel, _ := c.Ctx.GetPostForm("tel")
 	gender, _ := c.Ctx.GetPostForm("gender")
-	err := c.Service.UpdateUser(userId, username, tel, gender)
-	if err == nil {
-		c.Ctx.JSON(http.StatusOK, gin.H{
-			"msg": "ok",
-		})
-	}
+	err := c.Service.NewUser(username, tel, gender)
+	return err
+}
+
+// @Tags 用户相关
+// @Summary 添加用户图像
+// @Description 添加用户图像
+// @Accept  multipart/form-data
+// @Produce json
+// @Param userId path     int    true "用户id"
+// @Param image  formData string true "头像，base64"
+// @Success 200 {string} Helloworld
+// @Router /user/{userId}/headImage [post]
+func (c *UserController) UserImage(userId int) error {
+	image, _ := c.Ctx.GetPostForm("image")
+	glog.Glog.Info("HeadImage userId:", userId, "->image:", image)
+	return nil
+}
+
+// @Tags 用户相关
+// @Summary 查询用户
+// @Description 查询用户
+// @Accept  multipart/form-data
+// @Produce json
+// @Param   userId path string true "用户id"
+// @Success 200 {string} Helloworld
+// @Router /user/{userId} [get]
+func (c *UserController) GetUser(userId string) interface{} {
+	glog.Glog.Info("GetUser userId:", userId)
+	u := c.Service.GetUser(userId)
+	return u
+}
+
+// @Tags 用户相关
+// @Summary 删除用户
+// @Description 删除用户
+// @Accept  multipart/form-data
+// @Produce json
+// @Param   userId path string true "用户id"
+// @Success 200 {string} Helloworld
+// @Router /user/{userId} [delete]
+func (c *UserController) DelUser(userId string) {
+	glog.Glog.Info("DelUser userId:", userId)
+	c.Service.DeleteUser(userId)
+	return
+}
+
+// @Tags 用户相关
+// @Summary 更新用户
+// @Description 更新用户
+// @Accept  multipart/form-data
+// @Produce json
+// @Param   userId   path     int    true "用户id"
+// @Param   faceSha1 path     string true "hash值"
+// @Param   username formData string true "username"
+// @Success 200 {string} Helloworld
+// @Router /user/{userId}/{faceSha1} [put]
+func (c *UserController) UpdateUser(userId int, faceSha1 string) (int, string, error) {
+	username, _ := c.Ctx.GetPostForm("username")
+	glog.Glog.Info("UpdateUser userId:", userId, "->faceSha1:", faceSha1, "->username:", username)
+	c.Service.UpdateUser("", username, "", "")
+	return 0, "shangsan", model.NError{Code: 403, Msg: "气死你"}
 }

@@ -7,6 +7,7 @@ require (
 	github.com/gin-gonic/gin v1.8.2
 	github.com/gorilla/websocket v1.5.0
 	github.com/robfig/config v0.0.0-20141207224736-0f78529c8c7e
+	github.com/segmentio/objconv v1.0.1
 	github.com/shiena/ansicolor v0.0.0-20200904210342-c7312218db18
 	github.com/swaggo/files v1.0.0
 	github.com/swaggo/gin-swagger v1.5.3

@@ -6,14 +6,32 @@ import (
 	"github.com/gorilla/websocket"
 	"log"
 	"myGinFrame/glog"
+	"myGinFrame/webSocket"
 	"net/url"
 	"os"
 	"os/signal"
+	"time"
 )
 
-func init() {
+func init1() {
 	glog.Glog.Info("service init")
 	//websocketClient()
+	wsc := webSocket.NewWsClientManager("127.0.0.1", "8085", "/ws", "name=mvlite", 20)
+	wsc.ReceiveMsgFromServer = func(data []byte) {
+		glog.Glog.Info("read msg:", string(data))
+	}
+	data := map[string]interface{}{
+		"header": map[string]int{
+			"type": 3,
+		},
+		"body": map[string]string{
+			"filePath":    "/home/liusong/go/mm_models.zip",
+			"storagePath": "/edgeai.com/mvlite-models",
+		},
+	}
+	bytesData, _ := json.Marshal(data)
+	wsc.SendMsg(bytesData)
+	wsc.Start()
 }
 
 var addr = flag.String("addr", "127.0.0.1:8085", "http service address")
@@ -52,57 +70,57 @@ func websocketClient() {
 	bytesData, _ := json.Marshal(data)
 	err = c.WriteMessage(websocket.TextMessage, bytesData)
 	glog.Glog.Info("send heart msg:", string(bytesData))
-
+	time.Sleep(3 * time.Second)
 	data = map[string]interface{}{
 		"header": map[string]int{
 			"type": 3,
 		},
-		"filePath":    "/home/liusong/go/mm_models.zip",
-		"storagePath": "/edgeai.com/mvlite-models",
+		"body": map[string]string{
+			"filePath":    "/home/liusong/go/mm_models.zip",
+			"storagePath": "/edgeai.com/mvlite-models",
+		},
 	}
 	bytesData, _ = json.Marshal(data)
 	err = c.WriteMessage(websocket.TextMessage, bytesData)
 	glog.Glog.Info("send file msg:", string(bytesData))
-
-	//ticker := time.NewTicker(time.Second * 5)
-	//defer ticker.Stop()
-	//for {
-	//	select {
-	//	case <-done:
-	//		return
-	//	case t := <-ticker.C:
-	//		data := map[string]interface{}{
-	//			"header": map[string]int{
-	//				"type": 1,
-	//			},
-	//			"body": "ping",
-	//		}
-	//		bytesData, err := json.Marshal(data)
-	//		if err != nil {
-	//			glog.Glog.Error("json.Marshal err:", err)
-	//			return
-	//		}
-	//		err = c.WriteMessage(websocket.TextMessage, bytesData)
-	//		glog.Glog.Info("send msg:", t.String())
-	//		if err != nil {
-	//			glog.Glog.Error("write msg err:", err)
-	//			return
-	//		}
-	//	case <-interrupt:
-	//		glog.Glog.Info("interrupt")
-	//		// Cleanly close the connection by sending a close message and then
-	//		// waiting (with timeout) for the server to close the connection.
-	//		err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-	//		if err != nil {
-	//			glog.Glog.Error("WriteMessage err:", err)
-	//			return
-	//		}
-	//		select {
-	//		case <-done:
-	//		case <-time.After(time.Second):
-	//		}
-	//		return
-	//	}
-	//}
-
+	ticker := time.NewTicker(time.Second * 2)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-done:
+			return
+		case t := <-ticker.C:
+			data := map[string]interface{}{
+				"header": map[string]int{
+					"type": 1,
+				},
+				"body": "ping",
+			}
+			bytesData, err := json.Marshal(data)
+			if err != nil {
+				glog.Glog.Error("json.Marshal err:", err)
+				return
+			}
+			err = c.WriteMessage(websocket.TextMessage, bytesData)
+			glog.Glog.Info("send msg:", t.String())
+			if err != nil {
+				glog.Glog.Error("write msg err:", err)
+				return
+			}
+		case <-interrupt:
+			glog.Glog.Info("interrupt")
+			// Cleanly close the connection by sending a close message and then
+			// waiting (with timeout) for the server to close the connection.
+			err := c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+			if err != nil {
+				glog.Glog.Error("WriteMessage err:", err)
+				return
+			}
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+			}
+			return
+		}
+	}
 }
