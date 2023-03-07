@@ -1,0 +1,12 @@
+version: '3.4'
+services:
+  test-gin:
+    image: l-ubuntu
+    container_name: test-gin
+    environment: 
+      - TZ=Asia/Shanghai
+    volumes:    
+      - /home/liusong/go/go_project/myGinFrame:/home/myGinFrame
+    command: bash -c "cd /home/myGinFrame &&chmod 777 ./myGinFrame && ./myGinFrame"
+    network_mode: host
+    tty: true

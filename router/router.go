@@ -122,17 +122,19 @@ func notFindPage() gin.HandlerFunc {
 //Elem()方法：该方法只接受指针类型与接口类型,如果不是这两种类型就会抛出异常（相当于对指针进行取元素）
 //原文链接：https://blog.csdn.net/apple_51931783/article/details/122478170
 func setRouter(r *gin.RouterGroup, controller controller.Controller) {
-	WorkPath, err := os.Getwd()
+	workPath, err := os.Getwd()
 	if err != nil {
-		panic(err)
+		glog.Glog.Error("Getwd err:", err)
+		return
 	}
 	reflectVal := reflect.ValueOf(controller)
 	reflectValType := reflect.TypeOf(controller)
 	t := reflect.Indirect(reflectVal).Type()
 	//获取当前文件夹(package的绝对路径)
-	pkgRealpath := filepath.Join(WorkPath, "..", t.PkgPath())
+	pkgRealpath := filepath.Join(workPath, "..", t.PkgPath())
+	//glog.Glog.Info("workPath:", workPath, "-->t.PkgPath:", t.PkgPath(), "-->pkgRealpath:", pkgRealpath)
 	structPath := path.Join(pkgRealpath, t.Name()) + ".go"
-	//glog.Glog.Info("pkgRealpath:", pkgRealpath, "->structPath:", structPath)
+	//glog.Glog.Info("structPath:", structPath)
 	//glog.Glog.Info("reflectValType.String():", reflectValType.String())
 	//获取controller.UserController中的user字符串，用作url中的path
 	//pathName := strings.ToLower(strings.ReplaceAll(strings.Split(reflectValType.String(), ".")[1], "Controller", ""))
@@ -142,81 +144,84 @@ func setRouter(r *gin.RouterGroup, controller controller.Controller) {
 		return !info.IsDir() && !strings.HasPrefix(name, ".") && strings.HasSuffix(name, ".go")
 	}, parser.ParseComments)
 	if err != nil {
-		panic(err)
+		glog.Glog.Error("ParseDir err:", err, "->pkgRealpath:", pkgRealpath)
+		return
 	}
+	docFunMap := make(map[string]*ast.FuncDecl)
 	for _, pkg := range astPkgs {
 		for controllerName, fl := range pkg.Files {
 			if strings.ToLower(controllerName) == strings.ToLower(structPath) {
-				glog.Glog.Info("controllerFileName:", controllerName)
+				//glog.Glog.Info("controllerFileName:", controllerName)
 				for _, d := range fl.Decls {
 					switch d.(type) {
 					//判断ast分类(获取注释信息，在注释中获取路由url以及action)
 					case *ast.FuncDecl:
 						demo := d.(*ast.FuncDecl)
-						//glog.Glog.Info("funName:", demo.Name.Name)
-						if demo.Doc != nil {
-							methodNum := reflectValType.NumMethod()
-							for i := 0; i < methodNum; i++ {
-								method := reflectValType.Method(i)
-								//循环处理注册controller下面的方法
-								if method.Name == demo.Name.Name {
-									for _, l := range demo.Doc.List {
-										//获取注解中的路由path参数
-										if strings.Contains(l.Text, "Router") {
-											fun := &Func{
-												reflectVal:     reflectVal,
-												reflectValType: reflectValType,
-												pathParams:     make([]*pathParam, 0),
-												funcName:       method.Name,
-												controller:     controller,
-												returnParams:   make([]reflect.Type, 0),
-											}
-											routerParams := strings.Split(l.Text, " ")
-											if len(routerParams) == 4 {
-												//NumIn：方法参数个数
-												//In：方法第 i 个参数的类型，i 的范围是 [0, NumIn() - 1]
-												//NumOut：方法返回值个数
-												//Out：方法第 i 个 返回值的类型，i 的范围为 [0, NumOut() - 1]
-												//IsVariadic：判断方法是否存在可变参数
-												funType := method.Func.Type()
-												methodReturnNum := funType.NumOut()
-												methodInNum := funType.NumIn()
-												// "/image/{userId}/{faceSha1}" ->"/image/:userId/:faceSha1"
-												routerPath := routerParams[2]
-												pathParams := strings.Split(routerPath, "/")
-												//router path中的key值(方法的参数)
-												pathKeys := make([]string, 0)
-												for _, pathKey := range pathParams {
-													if strings.HasPrefix(pathKey, "{") && strings.HasSuffix(pathKey, "}") {
-														pathKeys = append(pathKeys, pathKey[1:len(pathKey)-1])
-													}
-												}
-												funParams := make([]reflect.Type, 0)
-												for j := 0; j < methodInNum; j++ {
-													in := funType.In(j)
-													//glog.Glog.Info("in name:", in.String())
-													if in.Kind().String() != "ptr" && !strings.Contains(in.Name(), "controller") {
-														funParams = append(funParams, in)
-													}
-												}
-												// 要求path中的参数数量和方法中参数的数量保持一致
-												if len(pathKeys) == len(funParams) {
-													for i, key := range pathKeys {
-														fun.pathParams = append(fun.pathParams, &pathParam{keyName: key, dataType: funParams[i]})
-													}
-													routerPath = strings.Replace(routerPath, "{", ":", -1)
-													routerPath = strings.Replace(routerPath, "}", "", -1)
-													action := strings.ToUpper(strings.Trim(strings.Trim(routerParams[3], "["), "]"))
-													for j := 0; j < methodReturnNum; j++ {
-														fun.returnParams = append(fun.returnParams, funType.Out(j))
-													}
-													r.Handle(action, routerPath, fun.Handle())
-												}
-											}
-										}
-									}
-								}
+						if demo.Name != nil && demo.Doc != nil {
+							//glog.Glog.Info("funName:", demo.Name.Name)
+							docFunMap[demo.Name.Name] = demo
+						}
+					}
+				}
+			}
+		}
+	}
+	methodNum := reflectValType.NumMethod()
+	for i := 0; i < methodNum; i++ {
+		method := reflectValType.Method(i)
+		//循环处理注册controller下面的方法
+		if demo, ok := docFunMap[method.Name]; ok {
+			for _, l := range demo.Doc.List {
+				//获取注解中的路由path参数
+				if strings.Contains(l.Text, "Router") {
+					fun := &Func{
+						reflectVal:     reflectVal,
+						reflectValType: reflectValType,
+						pathParams:     make([]*pathParam, 0),
+						funcName:       method.Name,
+						controller:     controller,
+						returnParams:   make([]reflect.Type, 0),
+					}
+					routerParams := strings.Split(l.Text, " ")
+					if len(routerParams) == 4 {
+						//NumIn：方法参数个数
+						//In：方法第 i 个参数的类型，i 的范围是 [0, NumIn() - 1]
+						//NumOut：方法返回值个数
+						//Out：方法第 i 个 返回值的类型，i 的范围为 [0, NumOut() - 1]
+						//IsVariadic：判断方法是否存在可变参数
+						funType := method.Func.Type()
+						methodReturnNum := funType.NumOut()
+						methodInNum := funType.NumIn()
+						// "/image/{userId}/{faceSha1}" ->"/image/:userId/:faceSha1"
+						routerPath := routerParams[2]
+						pathParams := strings.Split(routerPath, "/")
+						//router path中的key值(方法的参数)
+						pathKeys := make([]string, 0)
+						for _, pathKey := range pathParams {
+							if strings.HasPrefix(pathKey, "{") && strings.HasSuffix(pathKey, "}") {
+								pathKeys = append(pathKeys, pathKey[1:len(pathKey)-1])
 							}
+						}
+						funParams := make([]reflect.Type, 0)
+						for j := 0; j < methodInNum; j++ {
+							in := funType.In(j)
+							if in.Kind().String() != "ptr" && !strings.Contains(in.Name(), "controller") {
+								funParams = append(funParams, in)
+							}
+						}
+						// 要求path中的参数数量和方法中参数的数量保持一致
+						if len(pathKeys) == len(funParams) {
+							for i, key := range pathKeys {
+								fun.pathParams = append(fun.pathParams, &pathParam{keyName: key, dataType: funParams[i]})
+							}
+							routerPath = strings.Replace(routerPath, "{", ":", -1)
+							routerPath = strings.Replace(routerPath, "}", "", -1)
+							action := strings.ToUpper(strings.Trim(strings.Trim(routerParams[3], "["), "]"))
+							for j := 0; j < methodReturnNum; j++ {
+								fun.returnParams = append(fun.returnParams, funType.Out(j))
+							}
+							//通过反射以及解析注解，拿到方法名以及传递的参数类型，实例化一个反射实例，call调用方法名并拿到返回值，然后进行http返回
+							r.Handle(action, routerPath, fun.Handle())
 						}
 					}
 				}
@@ -262,8 +267,8 @@ func (fun *Func) Handle() func(ctx *gin.Context) {
 			ptrValue.Elem().FieldByName("Service").Set(fun.reflectVal.Elem().FieldByName("Service"))
 			//实例化一个反射对象，调用对象的相关方法，并传递参数
 			returnValues := ptrValue.MethodByName(fun.funcName).Call(params)
-			c.Writer.Header().Set("Content-type", "application/json")
-			c.Writer.WriteHeader(200)
+			//c.Writer.Header().Set("Content-type", "application/json")
+			//c.Writer.WriteHeader(200)
 			//这里要求controller最多返回两个参数，需要返回的数据用map、interface{}或者结构体的方式，并且error放在最后一个位置
 			if len(returnValues) > 0 && len(returnValues) == len(fun.returnParams) {
 				for i, returnParam := range fun.returnParams {
@@ -272,43 +277,48 @@ func (fun *Func) Handle() func(ctx *gin.Context) {
 							switch returnValues[i].Interface().(type) {
 							case model.NError:
 								v := returnValues[i].Interface().(model.NError)
-								writeJson(c.Writer, response{Code: v.Code, Msg: v.Msg})
+								//writeJson(c.Writer, response{Code: v.Code, Msg: v.Msg})
+								sendJson(c, response{Code: v.Code, Msg: v.Msg})
 								return
 							case error:
 								v := returnValues[i].Interface().(error)
-								writeJson(c.Writer, fail(v.Error()))
+								sendJson(c, fail(v.Error()))
 								return
 							default:
-								writeJson(c.Writer, success(nil))
+								sendJson(c, success(nil))
 								return
 							}
 						} else {
 							switch returnValues[i].Interface().(type) {
 							case model.NError:
 								v := returnValues[i].Interface().(model.NError)
-								writeJson(c.Writer, response{Code: v.Code, Msg: v.Msg})
+								sendJson(c, response{Code: v.Code, Msg: v.Msg})
 								return
 							case error:
 								v := returnValues[i].Interface().(error)
-								writeJson(c.Writer, fail(v.Error()))
+								sendJson(c, fail(v.Error()))
 								return
 							default:
-								writeJson(c.Writer, success(returnValues[i-1].Interface()))
+								sendJson(c, success(returnValues[i-1].Interface()))
 								return
 							}
 						}
 					}
 				}
-				writeJson(c.Writer, success(returnValues[0].Interface()))
+				sendJson(c, success(returnValues[0].Interface()))
 			} else {
-				writeJson(c.Writer, success(nil))
+				sendJson(c, success(nil))
 			}
 		} else {
 			//说明参数转化时出错
-			writeJson(c.Writer, fail("params input error!"))
+			sendJson(c, fail("params input error!"))
 		}
 	}
 	return f
+}
+
+func sendJson(ctx *gin.Context, obj response) {
+	ctx.JSON(http.StatusOK, obj)
 }
 
 func writeJson(writer gin.ResponseWriter, obj response) {
