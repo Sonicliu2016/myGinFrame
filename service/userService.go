@@ -3,6 +3,8 @@ package service
 import (
 	"myGinFrame/glog"
 	"myGinFrame/model"
+	"myGinFrame/mongodb"
+	"myGinFrame/mysql"
 )
 
 type UserServie interface {
@@ -13,27 +15,40 @@ type UserServie interface {
 }
 
 type userService struct {
+	userMysqlDao mysql.UserDao
+	userMongoDao mongodb.BaseDao
 }
 
 func NewUserService() UserServie {
-	return &userService{}
+	return &userService{
+		userMysqlDao: mysql.NewUserDaoManage(),
+		userMongoDao: mongodb.NewBaseDaoManage("numbers"),
+	}
 }
 
 func (s *userService) NewUser(userName, tel, gender string) error {
-	glog.Glog.Info("new user:", userName, tel, gender)
-	return nil
+	return s.userMysqlDao.Create(&model.User{
+		Name:   userName,
+		Tel:    tel,
+		Gender: 0,
+		//CreditCards: []*model.CreditCard{{CardNumber: "65535"}, {CardNumber: "10086"}},
+		//Languages:   []*model.Language{{Name: "English"}, {Name: "Franch"}},
+	})
 }
 
 func (s *userService) GetUser(userId string) *model.User {
-	return &model.User{UserName: "zhangsan", Tel: "13888888888", Gender: 1}
+	return &model.User{Name: "zhangsan", Tel: "13888888888", Gender: 1}
 }
 
 func (s *userService) DeleteUser(userId string) error {
 	glog.Glog.Info("del userId:", userId)
+	s.userMongoDao.UpdatePushBy(map[string]interface{}{"name": "ls"}, map[string]interface{}{"books": map[string]interface{}{"name": "golang", "price": 1000}}, true)
 	return nil
 }
 
 func (s *userService) UpdateUser(userId, username, tel, gender string) error {
 	glog.Glog.Info("update userId:", userId, username, tel, gender)
+	s.userMongoDao.UpdatePullBy(map[string]interface{}{"name": "zs"}, map[string]interface{}{"books": map[string]string{"name": "js"}}, true)
+	s.userMongoDao.UpdatePullBy(map[string]interface{}{"name": "zs"}, map[string]interface{}{"tags": []string{"1", "2"}}, true)
 	return nil
 }

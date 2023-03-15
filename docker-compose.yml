@@ -8,5 +8,71 @@ services:
     volumes:    
       - /home/liusong/go/go_project/myGinFrame:/home/myGinFrame
     command: bash -c "cd /home/myGinFrame &&chmod 777 ./myGinFrame && ./myGinFrame"
-    network_mode: host
+    network_mode: bridge
     tty: true
+
+  mysql:
+    image: "mysql:5.7"
+    container_name: mysql
+    volumes:
+      - ./mysql/data:/var/lib/mysql
+    ports:
+      - 3306:3306
+    environment:
+      - MYSQL_DATABASE=smart_check
+      - MYSQL_ROOT_PASSWORD=lishizhen2021
+      - TZ=Asia/Shanghai
+    command: --innodb_use_native_aio=0
+    network_mode: bridge
+
+  mongo-db: #指定服务名称
+    image: mongo:4
+    container_name: mongo-server #指定容器名称
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+      - MONGO_DATA_DIR=/data/db
+      - MONGO_LOG_DIR=/data/logs
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=123456
+    volumes:
+      - ./mongodb/data/db:/data/db
+      - ./mongodb/data/logs:/data/logs
+      - /etc/localtime:/etc/localtime
+    ports:
+      - 27017:27017
+    network_mode: bridge
+    tty: true
+
+  mongo-express:
+    image: mongo-express:latest
+    container_name: mongo-express
+    restart: always
+    links:
+      - mongo-db:mongodb #要链接的指定服务名称:别名
+    depends_on:
+      - mongo-db         #要依赖的指定服务名称
+    ports:
+      - 27018:8081
+    environment:
+      - ME_CONFIG_OPTIONS_EDITORTHEME=3024-night
+      - ME_CONFIG_BASICAUTH_USERNAME=admin      #登录mongo-express的用户名
+      - ME_CONFIG_BASICAUTH_PASSWORD=112233     #登录mongo-express的用户密码
+      - ME_CONFIG_MONGODB_SERVER=mongodb        #填写links中的别名
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=root    #连接mongo的用户名
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=123456  #连接的mongo的密码
+    network_mode: bridge
+
+  redis:
+    image: "redis:latest"
+    container_name: redis
+    restart: always
+    volumes:
+      - ./redis/data:/data:rw
+      - ./redis/redis.conf:/etc/redis/redis.conf:rw
+      - ./redis/logs:/logs
+    ports:
+      - 6379:6379
+    command:
+      /bin/bash -c "redis-server /etc/redis/redis.conf --appendonly yes"
+    network_mode: bridge

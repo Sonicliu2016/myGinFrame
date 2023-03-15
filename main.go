@@ -4,6 +4,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"io/ioutil"
 	"myGinFrame/glog"
+	_ "myGinFrame/mongodb"
+	_ "myGinFrame/mysql"
 	"myGinFrame/router"
 	"myGinFrame/tool"
 )
