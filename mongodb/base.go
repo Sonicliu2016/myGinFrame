@@ -2,39 +2,46 @@ package mongodb
 
 import (
 	"context"
+	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"myGinFrame/tool"
+	"reflect"
 	"sync"
 	"time"
 )
 
 type BaseDao interface {
 	coll() *mongo.Collection
-	Create(one interface{}) (*mongo.InsertOneResult, error)
-	CreateMany(many []interface{}) (*mongo.InsertManyResult, error)
+	Create(result interface{}) (*mongo.InsertOneResult, error)
+	CreateMany(results []interface{}) (*mongo.InsertManyResult, error)
 	Delete(id string) error
 	DeleteBy(where map[string]interface{}) error
-
 	Update(id string, updateFields map[string]interface{}) error
 	UpdateBy(where map[string]interface{}, updateFields map[string]interface{}, updateMany bool) error
 	//自增或自减文档中的某个int值
 	UpdateIncBy(where map[string]interface{}, updateFields map[string]interface{}, updateMany bool) error
 	//删除文档中数组中的元素
 	UpdatePullBy(where map[string]interface{}, updateFields map[string]interface{}, updateMany bool) error
+	//对Array(list) 数据进行增加新元素
 	UpdatePushBy(where map[string]interface{}, updateFields map[string]interface{}, updateMany bool) error
+	//删除记录中指定的key(field)
+	UpdateDeleteBy(where map[string]interface{}, deleteKeys []string, updateMany bool) error
 
-	Get(v interface{}, id string) error
-	GetBy(m interface{}, key, value string) error
-	GetManyBy(m interface{}, key, value string) error
-	GetManyByMany(m interface{}, filter map[string]interface{}) error
+	IsRecordExist(where map[string]interface{}) bool
+	Get(result interface{}, id string) error
+	GetBy(result interface{}, key, value string) error
+	GetOneByMany(result interface{}, where map[string]interface{}) error
+	GetManyBy(results interface{}, key, value string) error
+	GetManyByMany(results interface{}, where map[string]interface{}) error
+	GetCountBy(where map[string]interface{}) int64
+	GetDistinctBy(results interface{}, fieldName string, where map[string]interface{}) (err error)
+
 	GetManyByManyBySort(m interface{}, filter map[string]interface{}, sortBy map[string]interface{}) error
 	GetManyIn(m interface{}, key string, values []interface{}) error
-	IsRecordExist(filter map[string]interface{}) bool
 	GetOneOrder(m interface{}, key string, order int) error
-	GetOneByMany(m interface{}, filter map[string]interface{}) error
 	GetManyLike(m interface{}, filter map[string]interface{}, likes map[string]string) error
 	All(m interface{}) error
 }
@@ -63,12 +70,12 @@ func (d *BaseDaoManage) coll() *mongo.Collection {
 	return d.conn.Collection(d.tableName)
 }
 
-func (d *BaseDaoManage) Create(one interface{}) (*mongo.InsertOneResult, error) {
-	return d.coll().InsertOne(d.ctx, one)
+func (d *BaseDaoManage) Create(result interface{}) (*mongo.InsertOneResult, error) {
+	return d.coll().InsertOne(d.ctx, result)
 }
 
-func (d *BaseDaoManage) CreateMany(many []interface{}) (*mongo.InsertManyResult, error) {
-	return d.coll().InsertMany(d.ctx, many)
+func (d *BaseDaoManage) CreateMany(results []interface{}) (*mongo.InsertManyResult, error) {
+	return d.coll().InsertMany(d.ctx, results)
 }
 
 func (d *BaseDaoManage) Delete(id string) error {
@@ -163,16 +170,32 @@ func (d *BaseDaoManage) UpdatePushBy(where map[string]interface{}, updateFields 
 	}
 }
 
-func (d *BaseDaoManage) UpdateDeleteBy() {
-
+//删除记录中指定的key(field)
+//s.userMongoDao.UpdateDeleteBy(map[string]interface{}{"name": "ls"}, []string{"tags"}, true)
+func (d *BaseDaoManage) UpdateDeleteBy(where map[string]interface{}, deleteKeys []string, updateMany bool) error {
+	filter := bson.M{}
+	for k, v := range where {
+		filter[k] = v
+	}
+	updateFields := make(map[string]bool)
+	for _, key := range deleteKeys {
+		updateFields[key] = true
+	}
+	if updateMany {
+		_, err := d.coll().UpdateMany(d.ctx, filter, bson.M{"$set": bson.M{"model.updatedAt": time.Now()}, "$unset": updateFields})
+		return err
+	} else {
+		_, err := d.coll().UpdateOne(d.ctx, filter, bson.M{"$set": bson.M{"model.updatedAt": time.Now()}, "$unset": updateFields})
+		return err
+	}
 }
 
-func (d *BaseDaoManage) IsRecordExist(filter map[string]interface{}) bool {
-	f := bson.M{}
-	for k, v := range filter {
-		f[k] = v
+func (d *BaseDaoManage) IsRecordExist(where map[string]interface{}) bool {
+	filter := bson.M{}
+	for k, v := range where {
+		filter[k] = v
 	}
-	cur, err := d.coll().Find(d.ctx, f)
+	cur, err := d.coll().Find(d.ctx, filter)
 	if err != nil {
 		tool.Error.Println("Find err:", err)
 		return false
@@ -188,38 +211,89 @@ func (d *BaseDaoManage) IsRecordExist(filter map[string]interface{}) bool {
 	return false
 }
 
+func (d *BaseDaoManage) Get(result interface{}, id string) error {
+	return d.coll().FindOne(d.ctx, bson.M{"model.id": id}).Decode(result)
+}
+
+func (d *BaseDaoManage) GetBy(result interface{}, key, value string) error {
+	return d.coll().FindOne(d.ctx, bson.M{key: value}).Decode(result)
+}
+
+func (d *BaseDaoManage) GetOneByMany(result interface{}, where map[string]interface{}) error {
+	filter := bson.M{"model.deletedAt": nil}
+	for k, v := range where {
+		filter[k] = v
+	}
+	return d.coll().FindOne(d.ctx, filter).Decode(result)
+}
+
+func (d *BaseDaoManage) GetManyBy(results interface{}, key, value string) error {
+	cursor, err := d.coll().Find(d.ctx, bson.M{key: value})
+	if err != nil {
+		return err
+	}
+	return cursor.All(d.ctx, results)
+}
+
+func (d *BaseDaoManage) GetManyByMany(results interface{}, where map[string]interface{}) error {
+	filter := bson.M{}
+	for k, v := range where {
+		filter[k] = v
+	}
+	cursor, err := d.coll().Find(d.ctx, filter)
+	if err != nil {
+		return err
+	}
+	return cursor.All(d.ctx, results)
+}
+
+func (d *BaseDaoManage) GetCountBy(where map[string]interface{}) int64 {
+	filter := bson.M{}
+	for k, v := range where {
+		filter[k] = v
+	}
+	count, err := d.coll().CountDocuments(d.ctx, filter)
+	if err != nil {
+		tool.Error.Println("CountDocuments err:", err)
+		return 0
+	}
+	return count
+}
+
+//获取去除重复后字段的值
+//db.getCollection('numbers').distinct("books.name")
+//s.userMongoDao.GetDistinctBy(&names, "books.name", map[string]interface{}{})
+func (d *BaseDaoManage) GetDistinctBy(results interface{}, fieldName string, where map[string]interface{}) error {
+	filter := bson.M{}
+	for k, v := range where {
+		filter[k] = v
+	}
+	rs, err := d.coll().Distinct(d.ctx, fieldName, filter)
+	reflectResultsVal := reflect.ValueOf(results)
+	if reflectResultsVal.Kind() != reflect.Ptr {
+		return fmt.Errorf("results argument must be a pointer to a slice, but was a %s", reflectResultsVal.Kind())
+	}
+	sliceVal := reflectResultsVal.Elem()
+	if sliceVal.Kind() == reflect.Interface {
+		sliceVal = sliceVal.Elem()
+	}
+	if sliceVal.Kind() != reflect.Slice {
+		return fmt.Errorf("results argument must be a pointer to a slice, but was a pointer to %s", sliceVal.Kind())
+	}
+	for _, r := range rs {
+		s := reflect.ValueOf(r)
+		newElem := reflect.New(s.Type()).Elem()
+		newElem.Set(s)
+		sliceVal = reflect.Append(sliceVal, newElem)
+	}
+	reflectResultsVal.Elem().Set(sliceVal)
+	return err
+}
+
 func (d *BaseDaoManage) GetOneOrder(m interface{}, key string, order int) error {
 	opts := options.FindOne()
 	opts.SetSort(bson.D{{Key: key, Value: order}})
 	return d.coll().FindOne(d.ctx, bson.M{}, opts).Decode(m)
-}
-
-func (d *BaseDaoManage) Get(m interface{}, id string) error {
-	return d.coll().FindOne(d.ctx, bson.M{"model.id": id}).Decode(m)
-}
-
-func (d *BaseDaoManage) GetBy(m interface{}, key, value string) error {
-	return d.coll().FindOne(d.ctx, bson.M{key: value}).Decode(m)
-}
-
-func (d *BaseDaoManage) GetManyBy(m interface{}, key, value string) error {
-	c, e := d.coll().Find(d.ctx, bson.M{key: value})
-	if e != nil {
-		return e
-	}
-	return c.All(d.ctx, m)
-}
-
-func (d *BaseDaoManage) GetManyByMany(m interface{}, filter map[string]interface{}) error {
-	f := bson.M{"model.deletedAt": nil}
-	for k, v := range filter {
-		f[k] = v
-	}
-	c, e := d.coll().Find(d.ctx, f)
-	if e != nil {
-		return e
-	}
-	return c.All(d.ctx, m)
 }
 
 // 其中 1 为升序排列，而 -1 是用于降序排列
@@ -253,14 +327,6 @@ func (d *BaseDaoManage) GetManyIn(m interface{}, key string, values []interface{
 		return e
 	}
 	return c.All(d.ctx, m)
-}
-
-func (d *BaseDaoManage) GetOneByMany(m interface{}, filter map[string]interface{}) error {
-	f := bson.M{"model.deletedAt": nil}
-	for k, v := range filter {
-		f[k] = v
-	}
-	return d.coll().FindOne(d.ctx, f).Decode(m)
 }
 
 func (d *BaseDaoManage) GetManyLike(m interface{}, filter map[string]interface{}, likes map[string]string) error {

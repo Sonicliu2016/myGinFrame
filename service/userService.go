@@ -37,6 +37,11 @@ func (s *userService) NewUser(userName, tel, gender string) error {
 }
 
 func (s *userService) GetUser(userId string) *model.User {
+	//s.userMongoDao.UpdateDeleteBy(map[string]interface{}{"name": "ls"}, []string{"tags"}, true)
+	//glog.Glog.Info("count:", s.userMongoDao.GetCountBy(map[string]interface{}{}))
+	var names []float64
+	s.userMongoDao.GetDistinctBy(&names, "value", map[string]interface{}{})
+	glog.Glog.Info("names:", names)
 	return &model.User{Name: "zhangsan", Tel: "13888888888", Gender: 1}
 }
 

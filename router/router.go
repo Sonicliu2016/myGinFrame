@@ -119,7 +119,7 @@ func notFindPage() gin.HandlerFunc {
 //->该方法获取到的对象是对应的数据信息区域(具体的值可以通过Filed(index)直接拿到对应位置的值)
 //->FieldByName（字段名）
 //->可以通过该函数拿到成员属性的详细信息(返回值与ValueOf一样)
-//Elem()方法：该方法只接受指针类型与接口类型,如果不是这两种类型就会抛出异常（相当于对指针进行取元素）
+//Elem()方法：该方法只接受指针类型与接口类型,如果不是这两种类型就会抛出异常（相当于对指针进行取元素,）
 //原文链接：https://blog.csdn.net/apple_51931783/article/details/122478170
 func setRouter(r *gin.RouterGroup, controller controller.Controller) {
 	workPath, err := os.Getwd()
