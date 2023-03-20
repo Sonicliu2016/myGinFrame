@@ -37,18 +37,19 @@ type BaseDao interface {
 	GetManyBy(results interface{}, key, value string) error
 	GetManyByMany(results interface{}, where map[string]interface{}) error
 	GetCountBy(where map[string]interface{}) int64
+	//检索字段的非重复值
 	GetDistinctBy(results interface{}, fieldName string, where map[string]interface{}) (err error)
-
-	GetManyByManyBySort(m interface{}, filter map[string]interface{}, sortBy map[string]interface{}) error
-	GetManyIn(m interface{}, key string, values []interface{}) error
-	GetOneOrder(m interface{}, key string, order int) error
-	GetManyLike(m interface{}, filter map[string]interface{}, likes map[string]string) error
-	All(m interface{}) error
+	GetOneOrder(result interface{}, key string, order int) error
+	GetManyByManyBySort(results interface{}, where map[string]interface{}, sortBy map[string]int) error
+	GetManyIn(results interface{}, key string, values []interface{}) error
+	GetManyLike(results interface{}, where map[string]interface{}, likes map[string]string) error
+	All(results interface{}) error
 }
 
 //bson.D是BSON文档的有序表示 bson.D{{"foo", "bar"}, {"hello", "world"}, {"pi", 3.14159}}
 //bson.M是BSON文档的无序表示 bson.M{"foo": "bar", "hello": "world", "pi": 3.14159}
 //bson.A是BSON数组的有序表示 bson.A{"bar", "world", 3.14159, bson.D{{"qux", 12345}}}
+//https://www.mongodb.com/docs/drivers/go/current/fundamentals/crud/read-operations/query-document/
 type BaseDaoManage struct {
 	ctx       context.Context
 	conn      *mongo.Database
@@ -269,6 +270,7 @@ func (d *BaseDaoManage) GetDistinctBy(results interface{}, fieldName string, whe
 		filter[k] = v
 	}
 	rs, err := d.coll().Distinct(d.ctx, fieldName, filter)
+
 	reflectResultsVal := reflect.ValueOf(results)
 	if reflectResultsVal.Kind() != reflect.Ptr {
 		return fmt.Errorf("results argument must be a pointer to a slice, but was a %s", reflectResultsVal.Kind())
@@ -290,60 +292,60 @@ func (d *BaseDaoManage) GetDistinctBy(results interface{}, fieldName string, whe
 	return err
 }
 
-func (d *BaseDaoManage) GetOneOrder(m interface{}, key string, order int) error {
+func (d *BaseDaoManage) GetOneOrder(result interface{}, key string, order int) error {
 	opts := options.FindOne()
 	opts.SetSort(bson.D{{Key: key, Value: order}})
-	return d.coll().FindOne(d.ctx, bson.M{}, opts).Decode(m)
+	return d.coll().FindOne(d.ctx, bson.M{}, opts).Decode(result)
 }
 
-// 其中 1 为升序排列，而 -1 是用于降序排列
-func (d *BaseDaoManage) GetManyByManyBySort(m interface{}, filter map[string]interface{}, sortBy map[string]interface{}) error {
-	f := bson.M{"model.deletedAt": nil}
-	for k, v := range filter {
-		f[k] = v
+// sortBy:其中 1 为升序排列，而 -1 是用于降序排列
+func (d *BaseDaoManage) GetManyByManyBySort(results interface{}, where map[string]interface{}, sortBy map[string]int) error {
+	filter := bson.M{"model.deletedAt": nil}
+	for k, v := range where {
+		filter[k] = v
 	}
 	sort := bson.D{}
 	for k, v := range sortBy {
 		sort = append(sort, bson.E{Key: k, Value: v})
 	}
-	c, e := d.coll().Aggregate(d.ctx, bson.A{
+	cursor, err := d.coll().Aggregate(d.ctx, bson.A{
 		bson.M{
 			"$sort": sort,
 		},
 		bson.M{
-			"$match": f,
+			"$match": filter,
 		},
 	})
-	if e != nil {
-		return e
+	if err != nil {
+		return err
 	}
-	return c.All(d.ctx, m)
+	return cursor.All(d.ctx, results)
 }
 
-func (d *BaseDaoManage) GetManyIn(m interface{}, key string, values []interface{}) error {
-	f := bson.M{key: bson.M{"$in": values}}
-	c, e := d.coll().Find(d.ctx, f)
-	if e != nil {
-		return e
+func (d *BaseDaoManage) GetManyIn(results interface{}, key string, values []interface{}) error {
+	filter := bson.M{key: bson.M{"$in": values}}
+	cursor, err := d.coll().Find(d.ctx, filter)
+	if err != nil {
+		return err
 	}
-	return c.All(d.ctx, m)
+	return cursor.All(d.ctx, results)
 }
 
-func (d *BaseDaoManage) GetManyLike(m interface{}, filter map[string]interface{}, likes map[string]string) error {
-	f := bson.M{"model.deletedAt": nil}
-	for k, v := range filter {
-		f[k] = v
+func (d *BaseDaoManage) GetManyLike(results interface{}, where map[string]interface{}, likes map[string]string) error {
+	filter := bson.M{"model.deletedAt": nil}
+	for k, v := range where {
+		filter[k] = v
 	}
 	for k, v := range likes {
-		f[k] = primitive.Regex{Pattern: v, Options: "im"}
+		filter[k] = primitive.Regex{Pattern: v, Options: "im"}
 	}
-	return d.coll().FindOne(d.ctx, f).Decode(m)
+	return d.coll().FindOne(d.ctx, filter).Decode(results)
 }
 
-func (d *BaseDaoManage) All(m interface{}) error {
-	c, e := d.coll().Find(d.ctx, bson.M{"model.deletedAt": nil})
-	if e != nil {
-		return e
+func (d *BaseDaoManage) All(results interface{}) error {
+	cursor, err := d.coll().Find(d.ctx, bson.M{"model.deletedAt": nil})
+	if err != nil {
+		return err
 	}
-	return c.All(d.ctx, m)
+	return cursor.All(d.ctx, results)
 }
