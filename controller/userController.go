@@ -53,8 +53,9 @@ func (c *UserController) UserImage(userId int) error {
 // @Success 200 {string} Helloworld
 // @Router /user/{userId} [get]
 func (c *UserController) GetUser(userId string) interface{} {
-	glog.Glog.Info("GetUser userId:", userId)
 	u := c.Service.GetUser(userId)
+	//r,err := tool.RunShell("go","env")
+	//glog.Glog.Info("r:", r,"->err:",err)
 	return u
 }
 

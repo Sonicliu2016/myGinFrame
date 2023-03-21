@@ -2,6 +2,7 @@ package tool
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
@@ -18,6 +19,7 @@ func RunShell(s string, arg ...string) (string, error) {
 	cmd.Stdout = &out
 	cmd.Stderr = os.Stderr
 	//Run执行c包含的命令，并阻塞直到完成。  这里stdout被取出，cmd.Wait()无法正确获取stdin,stdout,stderr，则阻塞在那了
+	fmt.Println("cmd:",cmd.String())
 	err := cmd.Run()
 	return out.String(), err
 }
