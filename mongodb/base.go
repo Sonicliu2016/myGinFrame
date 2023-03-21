@@ -2,6 +2,7 @@ package mongodb
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -44,6 +45,8 @@ type BaseDao interface {
 	GetManyIn(results interface{}, key string, values []interface{}) error
 	GetManyLike(results interface{}, where map[string]interface{}, likes map[string]string) error
 	All(results interface{}) error
+	//有问题
+	Watch()
 }
 
 //bson.D是BSON文档的有序表示 bson.D{{"foo", "bar"}, {"hello", "world"}, {"pi", 3.14159}}
@@ -348,4 +351,28 @@ func (d *BaseDaoManage) All(results interface{}) error {
 		return err
 	}
 	return cursor.All(d.ctx, results)
+}
+
+func (d *BaseDaoManage) Watch() {
+	pipeline := mongo.Pipeline{bson.D{{"$match", bson.D{{"operationType", "insert"}}}}}
+	cs, err := d.coll().Watch(d.ctx, pipeline, options.ChangeStream().SetFullDocument(options.UpdateLookup))
+	if err != nil {
+		tool.Error.Println("err:", err)
+		return
+	}
+	tool.Info.Println("Waiting For Change Events. Insert something in MongoDB!")
+	for cs.Next(d.ctx) {
+		var event bson.M
+		if err = cs.Decode(&event); err != nil {
+			tool.Error.Println("err:", err)
+		}
+		output, err := json.MarshalIndent(event["fullDocument"], "", "    ")
+		if err != nil {
+			tool.Error.Println("err:", err)
+		}
+		tool.Info.Println("%s\n", output)
+	}
+	if err = cs.Err(); err != nil {
+		tool.Error.Println("err:", err)
+	}
 }

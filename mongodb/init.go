@@ -49,9 +49,9 @@ func connectMongodb(user, pwd, host, port, dbName string) (*mongo.Database, erro
 	}
 	db := client.Database(dbName)
 	glog.Glog.Info("连接mongo数据库:", dbName, "成功！")
-	collection := db.Collection("numbers")
-	result, _ := collection.InsertOne(ctx, bson.D{{"name", "pi"}, {"value", 3.14159}})
-	glog.Glog.Info("插入数据成功，result:", result)
+	//collection := db.Collection("numbers")
+	//result, _ := collection.InsertOne(ctx, bson.D{{"name", "pi"}, {"value", 3.14159}})
+	//glog.Glog.Info("插入数据成功，result:", result)
 	return db, nil
 }
 
