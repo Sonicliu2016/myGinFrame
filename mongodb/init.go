@@ -24,6 +24,7 @@ func init() {
 	dbName := tool.GetConfigStr("mongo_w_database")
 	w_db, _ = connectMongodb(userName, pwd, host, port, dbName)
 	addIndexToMongodb(new(model.User).TableName(), []string{"name"}, []string{"tel"})
+	initExample()
 }
 
 func connectMongodb(user, pwd, host, port, dbName string) (*mongo.Database, error) {
