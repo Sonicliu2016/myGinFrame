@@ -43,7 +43,7 @@ func (s *userService) NewUser(userName, tel, gender string) error {
 func (s *userService) GetUser(userId string) *model.User {
 	//s.userMongoDao.UpdateDeleteBy(map[string]interface{}{"name": "ls"}, []string{"tags"}, true)
 	//glog.Glog.Info("count:", s.userMongoDao.GetCountBy(map[string]interface{}{}))
-	mongodb.ExportMongoTable("mongo-server", "127.0.0.1:27017", "root", "123456", "gin_test", "numbers", "/home/numbers.json")
+	mongodb.ExportMongoTable("mongo-server", "127.0.0.1:27017", "root", "123456", "gin_test", "numbers", "/home/numbers.json", nil)
 	//s.userMongoDao.Watch()
 	var names []float64
 	s.userMongoDao.GetDistinctBy(&names, "value", map[string]interface{}{})
@@ -60,6 +60,6 @@ func (s *userService) DeleteUser(userId string) error {
 func (s *userService) UpdateUser(userId, username, tel, gender string) error {
 	glog.Glog.Info("update userId:", userId, username, tel, gender)
 	s.userMongoDao.UpdatePullBy(map[string]interface{}{"name": "zs"}, map[string]interface{}{"books": map[string]string{"name": "js"}}, true)
-	s.userMongoDao.UpdatePullBy(map[string]interface{}{"name": "zs"}, map[string]interface{}{"tags": []string{"1", "2"}}, true)
+	s.userMongoDao.UpdatePullBy(map[string]interface{}{"name": "zs"}, map[string]interface{}{"t![](../../../../../../media/xufeng8/share/F01.bmp)ags": []string{"1", "2"}}, true)
 	return nil
 }
