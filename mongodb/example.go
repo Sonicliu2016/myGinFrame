@@ -17,6 +17,9 @@ func initExample() {
 func testCreate() {
 	result, err := userMongoDao.Create(map[string]interface{}{"name": "pi", "value": 3.14})
 	glog.Glog.Info("result:", result, "->err:", err)
+	data := make([]interface{}, 0)
+	data = append(data, map[string]interface{}{})
+	userMongoDao.CreateMany(data)
 }
 
 func testExportMongoTable() {

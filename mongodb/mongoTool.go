@@ -17,7 +17,7 @@ func ExportMongoTableToJson(dockerImageName, mongoAddr, mongoUser, mongoPwd, dat
 	//cmdStr := "docker exec mongo-server sh -c \"mongoexport -h 127.0.0.1:27017 -u root -p 123456 -d gin_test -c numbers --authenticationDatabase admin -o /home/numbers.json\""
 	cmdStr := fmt.Sprintf("docker exec %s sh -c 'mongoexport -h %s -u %s -p %s --authenticationDatabase admin -d %s -c %s", dockerImageName, mongoAddr, mongoUser, mongoPwd, databaseName, tableName)
 	if len(query) > 0 {
-		queryStr := mapToJson(query)
+		queryStr := mapToJsonStr(query)
 		//转义字符
 		queryStr = strings.ReplaceAll(queryStr, "\"", "\\\"")
 		queryStr = strings.ReplaceAll(queryStr, "$", "\\$")
@@ -43,8 +43,17 @@ func ImportJsonToMongoTable(dockerImageName, mongoAddr, mongoUser, mongoPwd, dat
 	return err
 }
 
-func mapToJson(param map[string]interface{}) string {
+func mapToJsonStr(param map[string]interface{}) string {
 	dataType, _ := json.Marshal(param)
 	dataString := string(dataType)
 	return dataString
+}
+
+func jsonStrToMap(str string) map[string]interface{} {
+	var tempMap map[string]interface{}
+	err := json.Unmarshal([]byte(str), &tempMap)
+	if err != nil {
+		return nil
+	}
+	return tempMap
 }
