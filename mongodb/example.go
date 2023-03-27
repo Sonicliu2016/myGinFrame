@@ -15,7 +15,12 @@ func initExample() {
 	//testDelete()
 	//testUpdateInc()
 	//testUpdatePull()
-	testUpdatePush()
+	//testUpdatePush()
+	//testUpdateDelete()
+	//testGetCount()
+	//testGetDistinct()
+	testGetManyByManyBySort()
+	//testGetManyLike()
 }
 
 func testCreate() {
@@ -59,6 +64,47 @@ func testUpdatePush() {
 	//db.getCollection('numbers').update({ "name": "lisi"},{ "$push":	{"tags.2":"5"}})
 	//如果一个字段同时被多个更新操作符更新会报错
 	dao.UpdatePushBy(map[string]interface{}{"name": "lisi"}, map[string]interface{}{"books": map[string]interface{}{"bookName": "c++", "price": 50} /*"tags": "c++",*/, "tags.2": "5"}, false)
+}
+
+func testUpdateDelete() {
+	//删除tags
+	dao.UpdateDeleteBy(map[string]interface{}{"name": "zhangsan"}, []string{"tags"}, true)
+}
+
+//数组为空
+//db.getCollection("Array").find({"books":{$exists:true} ,$where: "this.books.length <= 0"})//数组length<= 0
+//db.getCollection("Array").find({"books.0":{$exists:0}})//数组第一个元素不存在
+//db.getCollection("Array").find({"books": []})//数组=[]
+//db.getCollection("Array").find({"books":{$size:0}})//数组的size为零
+//db.getCollection("Array").find({"vendor":{$not:{$elemMatch:{$ne:null}}}})//数组elemMatch是null
+//数组非空
+//db.getCollection('numbers').find({"books":{$exists:true} ,$where: "this.books.length >= 2"})//数组length> 0
+//db.getCollection("Array").find({"books.0":{$exists:1}})//数组第一个元素存在
+//db.getCollection("Array").find({"books": {$gt:[]}})//数组大于[]
+//db.getCollection("Array").find({books:{$not:{$size:0}}})数组的size不为零
+//db.getCollection("Array").find({"books":{$elemMatch:{$ne:null}}})//数组elemMatch不是null
+func testGetCount() {
+	glog.Glog.Info("count1:", dao.GetCountBy(map[string]interface{}{"books": map[string]interface{}{"$size": 2}}))
+	glog.Glog.Info("count2:", dao.GetCountBy(map[string]interface{}{"books.1": map[string]interface{}{"$exists": 1}}))
+}
+
+func testGetDistinct() {
+	var bookNames []string
+	dao.GetDistinctBy(&bookNames, "books.bookName", map[string]interface{}{})
+	glog.Glog.Info("bookNames:", bookNames)
+}
+
+func testGetManyByManyBySort() {
+	var results []interface{}
+	//dao.GetManyByManyBySort(&results, map[string]interface{}{"value": map[string]interface{}{"$gt": 3}}, map[string]int{"value": 1})
+	dao.GetManyByManyBySortAndSkipLimit(&results, map[string]interface{}{"value": map[string]interface{}{"$gt": 3}}, map[string]int{"value": 1},2,1)
+	glog.Glog.Info("results:", results)
+}
+
+func testGetManyLike()  {
+	var results []interface{}
+	dao.GetManyLike(&results, map[string]interface{}{}, map[string]string{"name": "p"})
+	glog.Glog.Info("results:", results)
 }
 
 func testExportMongoTable() {

@@ -42,6 +42,7 @@ type BaseDao interface {
 	GetDistinctBy(results interface{}, fieldName string, where map[string]interface{}) (err error)
 	GetOneOrder(result interface{}, key string, order int) error
 	GetManyByManyBySort(results interface{}, where map[string]interface{}, sortBy map[string]int) error
+	GetManyByManyBySortAndSkipLimit(results interface{}, where map[string]interface{}, sortBy map[string]int,limit,offset int) error
 	GetManyIn(results interface{}, key string, values []interface{}) error
 	GetManyLike(results interface{}, where map[string]interface{}, likes map[string]string) error
 	All(results interface{}) error
@@ -53,6 +54,19 @@ type BaseDao interface {
 //bson.M是BSON文档的无序表示 bson.M{"foo": "bar", "hello": "world", "pi": 3.14159}
 //bson.A是BSON数组的有序表示 bson.A{"bar", "world", 3.14159, bson.D{{"qux", 12345}}}
 //https://www.mongodb.com/docs/drivers/go/current/fundamentals/crud/read-operations/query-document/
+//https://www.jianshu.com/p/03b3f4da603a
+//数组为空
+//db.getCollection("Array").find({"books":{$exists:true} ,$where: "this.books.length <= 0"})//数组length<= 0
+//db.getCollection("Array").find({"books.0":{$exists:0}})//数组第一个元素不存在
+//db.getCollection("Array").find({"books": []})//数组=[]
+//db.getCollection("Array").find({"books":{$size:0}})//数组的size为零
+//db.getCollection("Array").find({"vendor":{$not:{$elemMatch:{$ne:null}}}})//数组elemMatch是null
+//数组非空
+//db.getCollection('numbers').find({"books":{$exists:true} ,$where: "this.books.length >= 2"})//数组length> 0
+//db.getCollection("Array").find({"books.0":{$exists:1}})//数组第一个元素存在
+//db.getCollection("Array").find({"books": {$gt:[]}})//数组大于[]
+//db.getCollection("Array").find({books:{$not:{$size:0}}})数组的size不为零
+//db.getCollection("Array").find({"books":{$elemMatch:{$ne:null}}})//数组elemMatch不是null
 type BaseDaoManage struct {
 	ctx       context.Context
 	conn      *mongo.Database
@@ -159,7 +173,6 @@ func (d *BaseDaoManage) UpdatePullBy(where map[string]interface{}, updateFields 
 
 //对Array(list)数据进行增加新元素
 //https://blog.csdn.net/lw9121/article/details/125341368
-//s.userMongoDao.UpdatePushBy(map[string]interface{}{"name": "ls"}, map[string]interface{}{"books": map[string]interface{}{"name": "golang", "price": 1000}}, true)
 func (d *BaseDaoManage) UpdatePushBy(where map[string]interface{}, updateFields map[string]interface{}, updateMany bool) error {
 	filter := bson.D{}
 	for k, v := range where {
@@ -266,7 +279,6 @@ func (d *BaseDaoManage) GetCountBy(where map[string]interface{}) int64 {
 
 //获取去除重复后字段的值
 //db.getCollection('numbers').distinct("books.name")
-//s.userMongoDao.GetDistinctBy(&names, "books.name", map[string]interface{}{})
 func (d *BaseDaoManage) GetDistinctBy(results interface{}, fieldName string, where map[string]interface{}) error {
 	filter := bson.M{}
 	for k, v := range where {
@@ -325,6 +337,37 @@ func (d *BaseDaoManage) GetManyByManyBySort(results interface{}, where map[strin
 	return cursor.All(d.ctx, results)
 }
 
+//https://www.cnblogs.com/igoodful/p/14345277.html
+//https://www.jianshu.com/p/72fc4409936c
+func (d *BaseDaoManage) GetManyByManyBySortAndSkipLimit(results interface{}, where map[string]interface{}, sortBy map[string]int,limit,offset int) error {
+	filter := bson.M{"model.deletedAt": nil}
+	for k, v := range where {
+		filter[k] = v
+	}
+	sort := bson.D{}
+	for k, v := range sortBy {
+		sort = append(sort, bson.E{Key: k, Value: v})
+	}
+	cursor, err := d.coll().Aggregate(d.ctx, bson.A{
+		bson.M{
+			"$sort": sort,
+		},
+		bson.M{
+			"$match": filter,
+		},
+		bson.M{
+			"$skip": offset,
+		},
+		bson.M{
+			"$limit": limit,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return cursor.All(d.ctx, results)
+}
+
 func (d *BaseDaoManage) GetManyIn(results interface{}, key string, values []interface{}) error {
 	filter := bson.M{key: bson.M{"$in": values}}
 	cursor, err := d.coll().Find(d.ctx, filter)
@@ -335,14 +378,18 @@ func (d *BaseDaoManage) GetManyIn(results interface{}, key string, values []inte
 }
 
 func (d *BaseDaoManage) GetManyLike(results interface{}, where map[string]interface{}, likes map[string]string) error {
-	filter := bson.M{"model.deletedAt": nil}
+	filter := bson.M{}
 	for k, v := range where {
 		filter[k] = v
 	}
 	for k, v := range likes {
 		filter[k] = primitive.Regex{Pattern: v, Options: "im"}
 	}
-	return d.coll().FindOne(d.ctx, filter).Decode(results)
+	cursor, err := d.coll().Find(d.ctx,filter)
+	if err != nil {
+		return err
+	}
+	return cursor.All(d.ctx, results)
 }
 
 func (d *BaseDaoManage) All(results interface{}) error {
