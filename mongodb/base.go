@@ -22,7 +22,7 @@ type BaseDao interface {
 	DeleteBy(where map[string]interface{}) error
 	Update(id string, updateFields map[string]interface{}) error
 	UpdateBy(where map[string]interface{}, updateFields map[string]interface{}, updateMany bool) error
-	//自增或自减文档中的某个int值
+	//自增或自减文档中的某个int、float值
 	UpdateIncBy(where map[string]interface{}, updateFields map[string]interface{}, updateMany bool) error
 	//删除文档中数组中的元素
 	UpdatePullBy(where map[string]interface{}, updateFields map[string]interface{}, updateMany bool) error
@@ -117,18 +117,17 @@ func (d *BaseDaoManage) UpdateBy(where map[string]interface{}, updateFields map[
 	}
 }
 
-//自增或自减文档中的某个int值
+//自增或自减文档中的某个int、float值
 func (d *BaseDaoManage) UpdateIncBy(where map[string]interface{}, updateFields map[string]interface{}, updateMany bool) error {
-	updateFields["model.updatedAt"] = time.Now()
 	filter := bson.M{}
 	for k, v := range where {
 		filter[k] = v
 	}
 	if updateMany {
-		_, err := d.coll().UpdateMany(d.ctx, filter, bson.M{"$inc": updateFields})
+		_, err := d.coll().UpdateMany(d.ctx, filter, bson.M{"$set": bson.M{"model.updatedAt": time.Now()}, "$inc": updateFields})
 		return err
 	} else {
-		_, err := d.coll().UpdateOne(d.ctx, filter, bson.M{"$inc": updateFields})
+		_, err := d.coll().UpdateOne(d.ctx, filter, bson.M{"$set": bson.M{"model.updatedAt": time.Now()}, "$inc": updateFields})
 		return err
 	}
 }
@@ -159,6 +158,7 @@ func (d *BaseDaoManage) UpdatePullBy(where map[string]interface{}, updateFields 
 }
 
 //对Array(list)数据进行增加新元素
+//https://blog.csdn.net/lw9121/article/details/125341368
 //s.userMongoDao.UpdatePushBy(map[string]interface{}{"name": "ls"}, map[string]interface{}{"books": map[string]interface{}{"name": "golang", "price": 1000}}, true)
 func (d *BaseDaoManage) UpdatePushBy(where map[string]interface{}, updateFields map[string]interface{}, updateMany bool) error {
 	filter := bson.D{}
