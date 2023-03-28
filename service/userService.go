@@ -50,13 +50,10 @@ func (s *userService) GetUser(userId string) *model.User {
 
 func (s *userService) DeleteUser(userId string) error {
 	glog.Glog.Info("del userId:", userId)
-	s.userMongoDao.UpdatePushBy(map[string]interface{}{"name": "ls"}, map[string]interface{}{"books": map[string]interface{}{"name": "golang", "price": 1000}}, true)
 	return nil
 }
 
 func (s *userService) UpdateUser(userId, username, tel, gender string) error {
 	glog.Glog.Info("update userId:", userId, username, tel, gender)
-	s.userMongoDao.UpdatePullBy(map[string]interface{}{"name": "zs"}, map[string]interface{}{"books": map[string]string{"name": "js"}}, true)
-	s.userMongoDao.UpdatePullBy(map[string]interface{}{"name": "zs"}, map[string]interface{}{"t![](../../../../../../media/xufeng8/share/F01.bmp)ags": []string{"1", "2"}}, true)
 	return nil
 }
