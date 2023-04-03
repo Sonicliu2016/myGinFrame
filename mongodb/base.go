@@ -16,8 +16,8 @@ import (
 
 type BaseDao interface {
 	coll() *mongo.Collection
-	Create(result interface{}) (*mongo.InsertOneResult, error)
-	CreateMany(results []interface{}) (*mongo.InsertManyResult, error)
+	Create(one interface{}) (*mongo.InsertOneResult, error)
+	CreateMany(many []interface{}) (*mongo.InsertManyResult, error)
 	Delete(id string) error
 	DeleteBy(where map[string]interface{}) error
 	Update(id string, updateFields map[string]interface{}) error
@@ -42,6 +42,7 @@ type BaseDao interface {
 	//检索字段的非重复值
 	GetDistinctBy(results interface{}, fieldName string, where map[string]interface{}) (err error)
 	GetOneOrder(result interface{}, key string, order int) error
+	//sortBy:其中 1 为升序排列，而 -1 是用于降序排列
 	GetManyByManyBySort(results interface{}, where map[string]interface{}, sortBy map[string]int) error
 	GetManyByManyBySortAndSkipLimit(results interface{}, where map[string]interface{}, sortBy map[string]int, limit, offset int) error
 	GetManyIn(results interface{}, key string, values []interface{}) error
@@ -91,12 +92,12 @@ func (d *BaseDaoManage) coll() *mongo.Collection {
 	return d.conn.Collection(d.tableName)
 }
 
-func (d *BaseDaoManage) Create(result interface{}) (*mongo.InsertOneResult, error) {
-	return d.coll().InsertOne(d.ctx, result)
+func (d *BaseDaoManage) Create(one interface{}) (*mongo.InsertOneResult, error) {
+	return d.coll().InsertOne(d.ctx, one)
 }
 
-func (d *BaseDaoManage) CreateMany(results []interface{}) (*mongo.InsertManyResult, error) {
-	return d.coll().InsertMany(d.ctx, results)
+func (d *BaseDaoManage) CreateMany(many []interface{}) (*mongo.InsertManyResult, error) {
+	return d.coll().InsertMany(d.ctx, many)
 }
 
 func (d *BaseDaoManage) Delete(id string) error {
