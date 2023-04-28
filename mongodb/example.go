@@ -8,7 +8,8 @@ var dao BaseDao
 
 func initExample() {
 	glog.Glog.Info("mongo test init!")
-	dao = NewBaseDaoManage("numbers")
+	dao = NewNumberDao()
+	//dao = NewBaseDaoManage("numbers")
 	//testExportMongoTable()
 	//testImportToMongo()
 	//testCreate()
