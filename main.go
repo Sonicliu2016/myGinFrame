@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/gin-gonic/gin"
 	"io/ioutil"
 	"myGinFrame/glog"
 	_ "myGinFrame/mongodb"
@@ -9,6 +8,8 @@ import (
 	_ "myGinFrame/redis"
 	"myGinFrame/router"
 	"myGinFrame/tool"
+
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
