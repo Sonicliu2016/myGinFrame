@@ -6,6 +6,7 @@ import (
 	"myGinFrame/glog"
 	_ "myGinFrame/mongodb"
 	_ "myGinFrame/mysql"
+	_ "myGinFrame/redis"
 	"myGinFrame/router"
 	"myGinFrame/tool"
 )
