@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
 	github.com/gin-gonic/gin v1.8.2
+	github.com/gomodule/redigo v1.8.9
 	github.com/gorilla/websocket v1.5.0
 	github.com/robfig/config v0.0.0-20141207224736-0f78529c8c7e
 	github.com/segmentio/objconv v1.0.1
@@ -13,7 +14,6 @@ require (
 	github.com/swaggo/gin-swagger v1.5.3
 	github.com/swaggo/swag v1.8.10
 	go.mongodb.org/mongo-driver v1.11.2
-	golang.org/x/image v0.6.0
 	gorm.io/driver/mysql v1.4.7
 	gorm.io/gorm v1.24.6
 )

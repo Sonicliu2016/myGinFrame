@@ -16,8 +16,8 @@ import (
 
 type BaseDao interface {
 	coll() *mongo.Collection
-	Create(result interface{}) (*mongo.InsertOneResult, error)
-	CreateMany(results []interface{}) (*mongo.InsertManyResult, error)
+	Create(one interface{}) (*mongo.InsertOneResult, error)
+	CreateMany(many []interface{}) (*mongo.InsertManyResult, error)
 	Delete(id string) error
 	DeleteBy(where map[string]interface{}) error
 	Update(id string, updateFields map[string]interface{}) error
@@ -35,22 +35,26 @@ type BaseDao interface {
 	Get(result interface{}, id string) error
 	GetBy(result interface{}, key, value string) error
 	GetOneByMany(result interface{}, where map[string]interface{}) error
+	GetOneLike(result interface{}, where map[string]interface{}, likes map[string]string) error
 	GetManyBy(results interface{}, key, value string) error
 	GetManyByMany(results interface{}, where map[string]interface{}) error
 	GetCountBy(where map[string]interface{}) int64
 	//检索字段的非重复值
 	GetDistinctBy(results interface{}, fieldName string, where map[string]interface{}) (err error)
 	GetOneOrder(result interface{}, key string, order int) error
+	//sortBy:其中 1 为升序排列，而 -1 是用于降序排列
 	GetManyByManyBySort(results interface{}, where map[string]interface{}, sortBy map[string]int) error
-	GetManyByManyBySortAndSkipLimit(results interface{}, where map[string]interface{}, sortBy map[string]int,limit,offset int) error
+	GetManyByManyBySortAndSkipLimit(results interface{}, where map[string]interface{}, sortBy map[string]int, limit, offset int) error
 	GetManyIn(results interface{}, key string, values []interface{}) error
 	GetManyLike(results interface{}, where map[string]interface{}, likes map[string]string) error
+	GetSumByGroupKey(results interface{}, where map[string]interface{}, groupByKey string) error
 	All(results interface{}) error
 	//有问题
 	Watch()
 }
 
 //bson.D是BSON文档的有序表示 bson.D{{"foo", "bar"}, {"hello", "world"}, {"pi", 3.14159}}
+//bson.E 表示 D 的 BSON 元素。它通常在 D 内部使用
 //bson.M是BSON文档的无序表示 bson.M{"foo": "bar", "hello": "world", "pi": 3.14159}
 //bson.A是BSON数组的有序表示 bson.A{"bar", "world", 3.14159, bson.D{{"qux", 12345}}}
 //https://www.mongodb.com/docs/drivers/go/current/fundamentals/crud/read-operations/query-document/
@@ -88,12 +92,12 @@ func (d *BaseDaoManage) coll() *mongo.Collection {
 	return d.conn.Collection(d.tableName)
 }
 
-func (d *BaseDaoManage) Create(result interface{}) (*mongo.InsertOneResult, error) {
-	return d.coll().InsertOne(d.ctx, result)
+func (d *BaseDaoManage) Create(one interface{}) (*mongo.InsertOneResult, error) {
+	return d.coll().InsertOne(d.ctx, one)
 }
 
-func (d *BaseDaoManage) CreateMany(results []interface{}) (*mongo.InsertManyResult, error) {
-	return d.coll().InsertMany(d.ctx, results)
+func (d *BaseDaoManage) CreateMany(many []interface{}) (*mongo.InsertManyResult, error) {
+	return d.coll().InsertMany(d.ctx, many)
 }
 
 func (d *BaseDaoManage) Delete(id string) error {
@@ -244,6 +248,17 @@ func (d *BaseDaoManage) GetOneByMany(result interface{}, where map[string]interf
 	return d.coll().FindOne(d.ctx, filter).Decode(result)
 }
 
+func (d *BaseDaoManage) GetOneLike(result interface{}, where map[string]interface{}, likes map[string]string) error {
+	filter := bson.M{}
+	for k, v := range where {
+		filter[k] = v
+	}
+	for k, v := range likes {
+		filter[k] = primitive.Regex{Pattern: v, Options: "im"}
+	}
+	return d.coll().FindOne(d.ctx, filter).Decode(result)
+}
+
 func (d *BaseDaoManage) GetManyBy(results interface{}, key, value string) error {
 	cursor, err := d.coll().Find(d.ctx, bson.M{key: value})
 	if err != nil {
@@ -264,6 +279,14 @@ func (d *BaseDaoManage) GetManyByMany(results interface{}, where map[string]inte
 	return cursor.All(d.ctx, results)
 }
 
+//db.sales.aggregate( [
+//  {
+//    $group: {
+//       _id: null,
+//       count: { $count: { } }
+//    }
+//  }
+//] )
 func (d *BaseDaoManage) GetCountBy(where map[string]interface{}) int64 {
 	filter := bson.M{}
 	for k, v := range where {
@@ -325,10 +348,10 @@ func (d *BaseDaoManage) GetManyByManyBySort(results interface{}, where map[strin
 	}
 	cursor, err := d.coll().Aggregate(d.ctx, bson.A{
 		bson.M{
-			"$sort": sort,
+			"$match": filter,
 		},
 		bson.M{
-			"$match": filter,
+			"$sort": sort,
 		},
 	})
 	if err != nil {
@@ -339,7 +362,7 @@ func (d *BaseDaoManage) GetManyByManyBySort(results interface{}, where map[strin
 
 //https://www.cnblogs.com/igoodful/p/14345277.html
 //https://www.jianshu.com/p/72fc4409936c
-func (d *BaseDaoManage) GetManyByManyBySortAndSkipLimit(results interface{}, where map[string]interface{}, sortBy map[string]int,limit,offset int) error {
+func (d *BaseDaoManage) GetManyByManyBySortAndSkipLimit(results interface{}, where map[string]interface{}, sortBy map[string]int, limit, offset int) error {
 	filter := bson.M{"model.deletedAt": nil}
 	for k, v := range where {
 		filter[k] = v
@@ -350,10 +373,10 @@ func (d *BaseDaoManage) GetManyByManyBySortAndSkipLimit(results interface{}, whe
 	}
 	cursor, err := d.coll().Aggregate(d.ctx, bson.A{
 		bson.M{
-			"$sort": sort,
+			"$match": filter,
 		},
 		bson.M{
-			"$match": filter,
+			"$sort": sort,
 		},
 		bson.M{
 			"$skip": offset,
@@ -385,7 +408,32 @@ func (d *BaseDaoManage) GetManyLike(results interface{}, where map[string]interf
 	for k, v := range likes {
 		filter[k] = primitive.Regex{Pattern: v, Options: "im"}
 	}
-	cursor, err := d.coll().Find(d.ctx,filter)
+	cursor, err := d.coll().Find(d.ctx, filter)
+	if err != nil {
+		return err
+	}
+	return cursor.All(d.ctx, results)
+}
+
+//https://www.mongodb.com/docs/v6.0/reference/operator/aggregation/group/
+//db.getCollection('numbers').aggregate([
+//    {$match:{key:{$exists:true}}},
+//    {$group:{_id:"$key",count:{$sum:1}}}
+//])
+func (d *BaseDaoManage) GetSumByGroupKey(results interface{}, where map[string]interface{}, groupByKey string) error {
+	filter := bson.M{}
+	for k, v := range where {
+		filter[k] = v
+	}
+	group := bson.M{"_id": "$" + groupByKey, "count": bson.D{{"$sum", 1}}}
+	cursor, err := d.coll().Aggregate(d.ctx, bson.A{
+		bson.M{
+			"$match": filter,
+		},
+		bson.M{
+			"$group": group,
+		},
+	})
 	if err != nil {
 		return err
 	}

@@ -8,7 +8,8 @@ var dao BaseDao
 
 func initExample() {
 	glog.Glog.Info("mongo test init!")
-	dao = NewBaseDaoManage("numbers")
+	dao = NewNumberDao()
+	//dao = NewBaseDaoManage("numbers")
 	//testExportMongoTable()
 	//testImportToMongo()
 	//testCreate()
@@ -19,8 +20,9 @@ func initExample() {
 	//testUpdateDelete()
 	//testGetCount()
 	//testGetDistinct()
-	testGetManyByManyBySort()
+	//testGetManyByManyBySort()
 	//testGetManyLike()
+	testGetSumByGroupKey()
 }
 
 func testCreate() {
@@ -97,13 +99,21 @@ func testGetDistinct() {
 func testGetManyByManyBySort() {
 	var results []interface{}
 	//dao.GetManyByManyBySort(&results, map[string]interface{}{"value": map[string]interface{}{"$gt": 3}}, map[string]int{"value": 1})
-	dao.GetManyByManyBySortAndSkipLimit(&results, map[string]interface{}{"value": map[string]interface{}{"$gt": 3}}, map[string]int{"value": 1},2,1)
+	dao.GetManyByManyBySortAndSkipLimit(&results, map[string]interface{}{"value": map[string]interface{}{"$gt": 3}}, map[string]int{"value": 1}, 2, 1)
 	glog.Glog.Info("results:", results)
 }
 
-func testGetManyLike()  {
+func testGetManyLike() {
 	var results []interface{}
 	dao.GetManyLike(&results, map[string]interface{}{}, map[string]string{"name": "p"})
+	glog.Glog.Info("results:", results)
+}
+
+func testGetSumByGroupKey() {
+	var results []interface{}
+	dao.GetSumByGroupKey(&results,
+		map[string]interface{}{"key": map[string]interface{}{"$exists": true}},
+		"key")
 	glog.Glog.Info("results:", results)
 }
 
