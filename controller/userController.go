@@ -40,7 +40,6 @@ func (c *UserController) NewUser() error {
 // @Router /user/{userId}/headImage [post]
 func (c *UserController) UserImage(userId int) error {
 	image, _ := c.Ctx.GetPostForm("image")
-	c.Ctx.Request.Body
 	glog.Glog.Info("HeadImage userId:", userId, "->image:", image)
 	return nil
 }

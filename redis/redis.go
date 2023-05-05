@@ -2,12 +2,13 @@ package redis
 
 import (
 	"encoding/json"
-	"github.com/gomodule/redigo/redis"
 	"myGinFrame/glog"
 	"myGinFrame/tool"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/gomodule/redigo/redis"
 )
 
 var (
@@ -91,7 +92,7 @@ func newRedisPool() *redis.Pool {
 }
 
 func rdsdo(cmd string, key string, args ...interface{}) (interface{}, error) {
-	dbNum := 0
+	dbNum := 1
 	//switch {
 	//case strings.HasPrefix(key, model.EMAILCODE_COUNTDOWN_RESULT_KEY):
 	//	dbNum = model.EMAILCODE_COUNTDOWN_DB
@@ -375,4 +376,22 @@ func RdbSISMembers(key, v string) bool {
 		return false
 	}
 	return b
+}
+
+func SetHash(key, k string, v interface{}) error {
+	_, err := rdsdo("HSET", key, k, v)
+	if err != nil {
+		glog.Glog.Error("HSET error", err.Error())
+		return err
+	}
+	return nil
+}
+
+func GetHashAll(key string) ([]interface{}, error) {
+	result, err := rdsdo("HGETALL", key)
+	if nil != err {
+		glog.Glog.Debug("redis HGETALL error:" + err.Error())
+		return nil, err
+	}
+	return redis.Values(result, err)
 }

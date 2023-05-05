@@ -18,7 +18,9 @@ import (
 )
 
 type FileServie interface {
-	InitialMultipartUpload(username, fileHash string, fileSize int) error
+	InitBlockUpload(username, fileHash string, fileSize int) (interface{}, error)
+	MultipartUpload(uploadId, chunkHash, chunkIndex string, body io.ReadCloser) error
+	CompleteUploadHandler(uploadId, fileHash string) error
 }
 
 type fileService struct {
@@ -39,32 +41,32 @@ const (
 	// MergeDir : 合并后的文件所在目录
 	MergeDir = "/data/merge/"
 	// ChunkKeyPrefix : 分块信息对应的redis键前缀
-	ChunkKeyPrefix = "MP_"
+	ChunkKeyPrefix = "chunk_"
 	// HashUpIDKeyPrefix : 文件hash映射uploadid对应的redis键前缀
-	HashUpIDKeyPrefix = "HASH_UPID_"
+	HashUploadIdKeyPrefix = "hash_upload_id_"
 )
 
 // 分块上传 : 初始化信息
 type MultipartUploadInfo struct {
-	FileHash string
-	FileSize int
-	UploadId string
+	FileHash string `json:"fileHash"`
+	FileSize int    `json:"fileSize"`
+	UploadId string `json:"uploadId"`
 	//每一个分块的大小
-	ChunkSize  int
-	ChunkCount int
+	ChunkSize  int `json:"chunkSize"`
+	ChunkCount int `json:"chunkCount"`
 	// 已经上传完成的分块索引列表
-	ChunkExists []int
+	ChunkExists []int `json:"chunkExists"`
 }
 
-// InitialMultipartUpload : 初始化分块上传
-func (s *fileService) InitialMultipartUpload(username, fileHash string, fileSize int) error {
+// InitBlockUpload : 初始化分块上传
+func (s *fileService) InitBlockUpload(username, fileHash string, fileSize int) (interface{}, error) {
 	var uploadId string
 	var err error
 	// 1. 通过文件hash判断是否断点续传，并获取uploadID
-	if redis.CheckKey(HashUpIDKeyPrefix + fileHash) {
-		uploadId, err = redis.GetString(HashUpIDKeyPrefix + fileHash)
+	if redis.CheckKey(HashUploadIdKeyPrefix + fileHash) {
+		uploadId, err = redis.GetString(HashUploadIdKeyPrefix + fileHash)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -74,9 +76,9 @@ func (s *fileService) InitialMultipartUpload(username, fileHash string, fileSize
 	if uploadId == "" {
 		uploadId = username + fmt.Sprintf("%x", time.Now().UnixNano())
 	} else {
-		chunks, err := redis.Values(rConn.Do("HGETALL", ChunkKeyPrefix+uploadId))
+		chunks, err := redis.GetHashAll(ChunkKeyPrefix + uploadId)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for i := 0; i < len(chunks); i += 2 {
 			k := string(chunks[i].([]byte))
@@ -90,7 +92,7 @@ func (s *fileService) InitialMultipartUpload(username, fileHash string, fileSize
 	}
 
 	// 3. 生成分块上传的初始化信息
-	upInfo := MultipartUploadInfo{
+	upInfo := &MultipartUploadInfo{
 		FileHash:    fileHash,
 		FileSize:    fileSize,
 		UploadId:    uploadId,
@@ -102,17 +104,17 @@ func (s *fileService) InitialMultipartUpload(username, fileHash string, fileSize
 	// 4. 将初始化信息写入到redis缓存
 	if len(upInfo.ChunkExists) <= 0 {
 		hkey := ChunkKeyPrefix + upInfo.UploadId
-		rConn.Do("HSET", hkey, "chunkcount", upInfo.ChunkCount)
-		rConn.Do("HSET", hkey, "filehash", upInfo.FileHash)
-		rConn.Do("HSET", hkey, "filesize", upInfo.FileSize)
-		rConn.Do("EXPIRE", hkey, 60*60*12)
-		rConn.Do("SET", HashUpIDKeyPrefix+fileHash, upInfo.UploadId, "EX", 60*60*12)
+		redis.SetHash(hkey, "chunkcount", upInfo.ChunkCount)
+		redis.SetHash(hkey, "filehash", upInfo.FileHash)
+		redis.SetHash(hkey, "filesize", upInfo.FileSize)
+		redis.SetKeyExpire(hkey, 60*60*12)
+		redis.SetKeyAndExpire(HashUploadIdKeyPrefix+fileHash, upInfo.UploadId, 60*60*12)
 	}
-	return nil
+	return upInfo, nil
 }
 
 // MultipartUpload : 上传文件分块
-func MultipartUpload(uploadId, chunkHash, chunkIndex string, body io.ReadCloser) error {
+func (s *fileService) MultipartUpload(uploadId, chunkHash, chunkIndex string, body io.ReadCloser) error {
 	// 1. 获得文件句柄，用于存储分块内容
 	fpath := ChunkDir + uploadId + "/" + chunkIndex
 	os.MkdirAll(path.Dir(fpath), os.ModePerm)
@@ -139,14 +141,13 @@ func MultipartUpload(uploadId, chunkHash, chunkIndex string, body io.ReadCloser)
 	}
 
 	// 3. 更新redis缓存状态
-	rConn.Do("HSET", ChunkKeyPrefix+uploadId, "chkidx_"+chunkIndex, 1)
-	return nil
+	return redis.SetHash(ChunkKeyPrefix+uploadId, "chkidx_"+chunkIndex, 1)
 }
 
 // CompleteUploadHandler : 通知上传合并
-func CompleteUploadHandler(uploadId, fileHash string) error {
+func (s *fileService) CompleteUploadHandler(uploadId, fileHash string) error {
 	// 1. 通过uploadid查询redis并判断是否所有分块上传完成
-	data, err := redis.Values(rConn.Do("HGETALL", "MP_"+uploadId))
+	data, err := redis.GetHashAll(ChunkKeyPrefix + uploadId)
 	if err != nil {
 		return err
 	}
@@ -178,9 +179,9 @@ func CompleteUploadHandler(uploadId, fileHash string) error {
 	//dblayer.OnUserFileUploadFinished(username, filehash, filename, int64(fsize))
 
 	// 更新于2020-04: 删除已上传的分块文件及redis分块信息
-	_, delHashErr := rConn.Do("DEL", HashUpIDKeyPrefix+fileHash)
-	delUploadID, delUploadInfoErr := redis.Int64(rConn.Do("DEL", ChunkKeyPrefix+uploadId))
-	if delUploadID != 1 || delUploadInfoErr != nil || delHashErr != nil {
+	delHashErr := redis.DelKey(HashUploadIdKeyPrefix + fileHash)
+	delChunkErr := redis.DelKey(ChunkKeyPrefix + uploadId)
+	if delChunkErr != nil || delHashErr != nil {
 		return errors.New("complete upload part failed")
 	}
 

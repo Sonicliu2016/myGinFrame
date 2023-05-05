@@ -66,6 +66,8 @@ func InitRouter() *gin.Engine {
 	//设置路由
 	userService := service.NewUserService()
 	userController := &controller.UserController{Service: userService}
+	fileService := service.NewFileService()
+	fileController := &controller.FileController{Service: fileService}
 	rg := app.Group("/v1")
 	{
 		//	//v1.POST("/user", userController.NewUser)
@@ -73,6 +75,7 @@ func InitRouter() *gin.Engine {
 		//	//v1.DELETE("/user/:userId", userController.DelUser)
 		//	//v1.PUT("/user/:userId", userController.UpdateUser)
 		setRouter(rg, userController)
+		setRouter(rg, fileController)
 	}
 	return app
 }
