@@ -2,6 +2,7 @@ package tool
 
 import (
 	"myGinFrame/glog"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -125,6 +126,16 @@ func MergeChuncksByShell(chunkDir string, destPath string, fileSha1 string) bool
 		return false
 	} else {
 		glog.Glog.Info("check sha1: " + destPath + " " + filehash + " " + fileSha1)
+	}
+	return true
+}
+
+// FileExists reports whether the named file or directory exists.
+func FileExists(name string) bool {
+	if _, err := os.Stat(name); err != nil {
+		if os.IsNotExist(err) {
+			return false
+		}
 	}
 	return true
 }

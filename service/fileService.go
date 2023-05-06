@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"myGinFrame/glog"
+	"myGinFrame/model"
 	"myGinFrame/mongodb"
 	"myGinFrame/mysql"
 	"myGinFrame/redis"
@@ -18,9 +19,12 @@ import (
 )
 
 type FileServie interface {
+	//InitBlockUpload : 初始化分块上传
 	InitBlockUpload(username, fileHash string, fileSize int) (interface{}, error)
-	MultipartUpload(uploadId, chunkHash, chunkIndex string, body io.ReadCloser) error
-	CompleteUploadHandler(uploadId, fileHash string) error
+	//UploadBlock : 上传文件分块
+	UploadBlock(uploadId, blockHash, blockIndex string, body io.ReadCloser) error
+	//CompleteUpload : 通知上传合并
+	CompleteUpload(uploadId, fileHash string) error
 }
 
 type fileService struct {
@@ -37,86 +41,76 @@ func NewFileService() FileServie {
 
 const (
 	// ChunkDir : 上传的分块所在目录
-	ChunkDir = "/data/chunks/"
+	BlockDir = "/file/blocks/"
 	// MergeDir : 合并后的文件所在目录
-	MergeDir = "/data/merge/"
+	MergeDir = "/file/merge/"
 	// ChunkKeyPrefix : 分块信息对应的redis键前缀
-	ChunkKeyPrefix = "chunk_"
+	FileKeyPrefix    = "file_"
+	BlockIndexPrefix = "blockIndex_"
 	// HashUpIDKeyPrefix : 文件hash映射uploadid对应的redis键前缀
-	HashUploadIdKeyPrefix = "hash_upload_id_"
+	UploadIdKeyPrefix = "upload_id_"
 )
-
-// 分块上传 : 初始化信息
-type MultipartUploadInfo struct {
-	FileHash string `json:"fileHash"`
-	FileSize int    `json:"fileSize"`
-	UploadId string `json:"uploadId"`
-	//每一个分块的大小
-	ChunkSize  int `json:"chunkSize"`
-	ChunkCount int `json:"chunkCount"`
-	// 已经上传完成的分块索引列表
-	ChunkExists []int `json:"chunkExists"`
-}
 
 // InitBlockUpload : 初始化分块上传
 func (s *fileService) InitBlockUpload(username, fileHash string, fileSize int) (interface{}, error) {
 	var uploadId string
 	var err error
 	// 1. 通过文件hash判断是否断点续传，并获取uploadID
-	if redis.CheckKey(HashUploadIdKeyPrefix + fileHash) {
-		uploadId, err = redis.GetString(HashUploadIdKeyPrefix + fileHash)
+	if redis.CheckKey(UploadIdKeyPrefix + fileHash) {
+		uploadId, err = redis.GetString(UploadIdKeyPrefix + fileHash)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	// 2.1 首次上传则新建uploadID
-	// 2.2 断点续传则根据uploadID获取已上传的文件分块列表
-	chunksExist := []int{}
+	// 2.1 首次上传则新建uploadId
+	// 2.2 断点续传则根据uploadId获取已上传的文件分块index
+	completedBlockIdxs := []int{}
 	if uploadId == "" {
 		uploadId = username + fmt.Sprintf("%x", time.Now().UnixNano())
 	} else {
-		chunks, err := redis.GetHashAll(ChunkKeyPrefix + uploadId)
+		blocks, err := redis.GetHashAll(FileKeyPrefix + uploadId)
 		if err != nil {
 			return nil, err
 		}
-		for i := 0; i < len(chunks); i += 2 {
-			k := string(chunks[i].([]byte))
-			v := string(chunks[i+1].([]byte))
-			if strings.HasPrefix(k, "chkidx_") && v == "1" {
-				// chkidx_6 -> 6
-				chunkIdx, _ := strconv.Atoi(k[7:len(k)])
-				chunksExist = append(chunksExist, chunkIdx)
+		for i := 0; i < len(blocks); i += 2 {
+			k := string(blocks[i].([]byte))
+			v := string(blocks[i+1].([]byte))
+			glog.Glog.Info("k:", k, "->v:", v)
+			if strings.HasPrefix(k, BlockIndexPrefix) && v == "ok" {
+				// blockIndex_6 -> 6
+				blockIdx, _ := strconv.Atoi(k[len(BlockIndexPrefix)+1:])
+				completedBlockIdxs = append(completedBlockIdxs, blockIdx)
 			}
 		}
 	}
 
 	// 3. 生成分块上传的初始化信息
-	upInfo := &MultipartUploadInfo{
-		FileHash:    fileHash,
-		FileSize:    fileSize,
-		UploadId:    uploadId,
-		ChunkSize:   5 * 1024 * 1024,                                       // 5MB
-		ChunkCount:  int(math.Ceil(float64(fileSize) / (5 * 1024 * 1024))), //向上取整
-		ChunkExists: chunksExist,
+	upInfo := &model.BlockFileUploadInfo{
+		FileHash:           fileHash,
+		FileSize:           fileSize,
+		UploadId:           uploadId,
+		BlockSize:          5 * 1024 * 1024,                                       // 5MB
+		BlockCount:         int(math.Ceil(float64(fileSize) / (5 * 1024 * 1024))), //向上取整
+		CompletedBlockIdxs: completedBlockIdxs,
 	}
 
 	// 4. 将初始化信息写入到redis缓存
-	if len(upInfo.ChunkExists) <= 0 {
-		hkey := ChunkKeyPrefix + upInfo.UploadId
-		redis.SetHash(hkey, "chunkcount", upInfo.ChunkCount)
-		redis.SetHash(hkey, "filehash", upInfo.FileHash)
-		redis.SetHash(hkey, "filesize", upInfo.FileSize)
+	if len(upInfo.CompletedBlockIdxs) <= 0 {
+		hkey := FileKeyPrefix + upInfo.UploadId
+		redis.SetHash(hkey, "fileHash", upInfo.FileHash)
+		redis.SetHash(hkey, "fileSize", upInfo.FileSize)
+		redis.SetHash(hkey, "blockCount", upInfo.BlockCount)
 		redis.SetKeyExpire(hkey, 60*60*12)
-		redis.SetKeyAndExpire(HashUploadIdKeyPrefix+fileHash, upInfo.UploadId, 60*60*12)
+		redis.SetKeyAndExpire(UploadIdKeyPrefix+fileHash, upInfo.UploadId, 60*60*12)
 	}
 	return upInfo, nil
 }
 
-// MultipartUpload : 上传文件分块
-func (s *fileService) MultipartUpload(uploadId, chunkHash, chunkIndex string, body io.ReadCloser) error {
+// UploadBlock : 上传文件分块
+func (s *fileService) UploadBlock(uploadId, blockHash, blockIndex string, body io.ReadCloser) error {
 	// 1. 获得文件句柄，用于存储分块内容
-	fpath := ChunkDir + uploadId + "/" + chunkIndex
+	fpath := tool.GetConfigStr("staticPath") + BlockDir + uploadId + "/" + blockIndex
 	os.MkdirAll(path.Dir(fpath), os.ModePerm)
 	fd, err := os.Create(fpath)
 	if err != nil {
@@ -133,32 +127,32 @@ func (s *fileService) MultipartUpload(uploadId, chunkHash, chunkIndex string, bo
 		}
 	}
 
-	// 2. 校验分块hash (updated at 2020-05)
+	// 2. 校验分块hash
 	cmpSha1, err := tool.ComputeSha1ByShell(fpath)
-	if err != nil || cmpSha1 != chunkHash {
-		glog.Glog.Error("Verify chunk sha1 failed, compare OK: %t, err:%+v\n", cmpSha1 == chunkHash, err)
+	if err != nil || cmpSha1 != blockHash {
+		glog.Glog.Error("Verify chunk sha1 failed, compare OK: %t, err:%+v\n", cmpSha1 == blockHash, err)
 		return err
 	}
 
-	// 3. 更新redis缓存状态
-	return redis.SetHash(ChunkKeyPrefix+uploadId, "chkidx_"+chunkIndex, 1)
+	// 3. 更新每个块上传完毕的信息
+	return redis.SetHash(FileKeyPrefix+uploadId, BlockIndexPrefix+blockIndex, "ok")
 }
 
-// CompleteUploadHandler : 通知上传合并
-func (s *fileService) CompleteUploadHandler(uploadId, fileHash string) error {
+// CompleteUpload : 通知上传合并
+func (s *fileService) CompleteUpload(uploadId, fileHash string) error {
 	// 1. 通过uploadid查询redis并判断是否所有分块上传完成
-	data, err := redis.GetHashAll(ChunkKeyPrefix + uploadId)
+	blocks, err := redis.GetHashAll(FileKeyPrefix + uploadId)
 	if err != nil {
 		return err
 	}
 	totalCount := 0
 	chunkCount := 0
-	for i := 0; i < len(data); i += 2 {
-		k := string(data[i].([]byte))
-		v := string(data[i+1].([]byte))
-		if k == "chunkcount" {
+	for i := 0; i < len(blocks); i += 2 {
+		k := string(blocks[i].([]byte))
+		v := string(blocks[i+1].([]byte))
+		if k == "blockCount" {
 			totalCount, _ = strconv.Atoi(v)
-		} else if strings.HasPrefix(k, "chkidx_") && v == "1" {
+		} else if strings.HasPrefix(k, BlockIndexPrefix) && v == "ok" {
 			chunkCount++
 		}
 	}
@@ -168,7 +162,7 @@ func (s *fileService) CompleteUploadHandler(uploadId, fileHash string) error {
 	}
 
 	// 4. 合并分块 (备注: 更新于2020/04/01; 此合并逻辑非必须实现，因后期转移到ceph/oss时也可以通过分块方式上传)
-	if mergeSuc := tool.MergeChuncksByShell(ChunkDir+uploadId, MergeDir+fileHash, fileHash); !mergeSuc {
+	if mergeSuc := tool.MergeChuncksByShell(BlockDir+uploadId, MergeDir+fileHash, fileHash); !mergeSuc {
 		return errors.New("complete upload failed")
 	}
 
@@ -179,16 +173,16 @@ func (s *fileService) CompleteUploadHandler(uploadId, fileHash string) error {
 	//dblayer.OnUserFileUploadFinished(username, filehash, filename, int64(fsize))
 
 	// 更新于2020-04: 删除已上传的分块文件及redis分块信息
-	delHashErr := redis.DelKey(HashUploadIdKeyPrefix + fileHash)
-	delChunkErr := redis.DelKey(ChunkKeyPrefix + uploadId)
+	/*delHashErr := redis.DelKey(UploadIdKeyPrefix + fileHash)
+	delChunkErr := redis.DelKey(FileKeyPrefix + uploadId)
 	if delChunkErr != nil || delHashErr != nil {
 		return errors.New("complete upload part failed")
 	}
 
-	delRes := tool.RemovePathByShell(ChunkDir + uploadId)
+	delRes := tool.RemovePathByShell(BlockDir + uploadId)
 	if !delRes {
 		fmt.Printf("Failed to delete chuncks as upload comoleted, uploadID: %s\n", uploadId)
-	}
+	}*/
 	return nil
 }
 

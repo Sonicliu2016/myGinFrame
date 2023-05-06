@@ -17,6 +17,7 @@
 .idea/*
 logs/*
 docs/*
+static/*
 docs/swagger.json
 docs/swagger.yaml
 errors.txt

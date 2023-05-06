@@ -22,7 +22,7 @@ func initExample() {
 	//testGetDistinct()
 	//testGetManyByManyBySort()
 	//testGetManyLike()
-	testGetSumByGroupKey()
+	//testGetSumByGroupKey()
 }
 
 func testCreate() {

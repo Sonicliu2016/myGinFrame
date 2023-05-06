@@ -92,7 +92,7 @@ func newRedisPool() *redis.Pool {
 }
 
 func rdsdo(cmd string, key string, args ...interface{}) (interface{}, error) {
-	dbNum := 1
+	dbNum := 10
 	//switch {
 	//case strings.HasPrefix(key, model.EMAILCODE_COUNTDOWN_RESULT_KEY):
 	//	dbNum = model.EMAILCODE_COUNTDOWN_DB
@@ -378,6 +378,8 @@ func RdbSISMembers(key, v string) bool {
 	return b
 }
 
+// 存储一个对象
+// HMSET people name "zhangsan" age 20 address "shenzhen"
 func SetHash(key, k string, v interface{}) error {
 	_, err := rdsdo("HSET", key, k, v)
 	if err != nil {
@@ -387,6 +389,9 @@ func SetHash(key, k string, v interface{}) error {
 	return nil
 }
 
+// 获取一个对象
+// HGETALL people
+// "name" "zhangsan" "age" "20" "address" "shenzhen"
 func GetHashAll(key string) ([]interface{}, error) {
 	result, err := rdsdo("HGETALL", key)
 	if nil != err {

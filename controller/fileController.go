@@ -2,12 +2,25 @@ package controller
 
 import (
 	"myGinFrame/service"
+	"myGinFrame/test"
 	"strconv"
 )
 
 type FileController struct {
 	BaseController
 	Service service.FileServie
+}
+
+// @Tags 文件相关
+// @Summary 测试分块上传
+// @Description 测试分块上传
+// @Accept  multipart/form-data
+// @Produce json
+// @Success 200 {string} Helloworld
+// @Router /file/test [post]
+func (c *FileController) Test() error {
+	test.Init()
+	return nil
 }
 
 // @Tags 文件相关
@@ -33,4 +46,21 @@ func (c *FileController) InitBlockUpload() (interface{}, error) {
 		return nil, err
 	}
 	return info, nil
+}
+
+// @Tags 文件相关
+// @Summary 初始化分块上传
+// @Description 初始化分块上传
+// @Accept  multipart/form-data
+// @Produce json
+// @Param username formData string true  "用户姓名"
+// @Param fileHash formData string false "文件hash值"
+// @Param fileSize formData string false "文件大小"
+// @Success 200 {string} Helloworld
+// @Router /file/startUploadBlock [post]
+func (c *FileController) StartUploadBlock() error {
+	uploadId, _ := c.Ctx.GetPostForm("uploadId")
+	blockHash, _ := c.Ctx.GetPostForm("blockHash")
+	blockIndex, _ := c.Ctx.GetPostForm("blockIndex")
+	return c.Service.UploadBlock(uploadId, blockHash, blockIndex, c.Ctx.Request.Body)
 }

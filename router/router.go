@@ -77,6 +77,7 @@ func InitRouter() *gin.Engine {
 		setRouter(rg, userController)
 		setRouter(rg, fileController)
 	}
+	glog.Glog.Info("InitRouter end !")
 	return app
 }
 
