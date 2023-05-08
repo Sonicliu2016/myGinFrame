@@ -24,7 +24,7 @@ type FileServie interface {
 	//UploadBlock : 上传文件分块
 	UploadBlock(uploadId, blockHash, blockIndex string, body io.ReadCloser) error
 	//CompleteUpload : 通知上传合并
-	CompleteUpload(uploadId, fileHash string) error
+	CompleteUpload(uploadId, fileName string) error
 }
 
 type fileService struct {
@@ -44,18 +44,18 @@ const (
 	BlockDir = "/file/blocks/"
 	// MergeDir : 合并后的文件所在目录
 	MergeDir = "/file/merge/"
-	// ChunkKeyPrefix : 分块信息对应的redis键前缀
-	FileKeyPrefix    = "file_"
-	BlockIndexPrefix = "blockIndex_"
 	// HashUpIDKeyPrefix : 文件hash映射uploadid对应的redis键前缀
 	UploadIdKeyPrefix = "upload_id_"
+	// fileKeyPrefix : 分块信息对应的redis键前缀
+	FileKeyPrefix    = "file_"
+	BlockIndexPrefix = "blockIndex_"
 )
 
 // InitBlockUpload : 初始化分块上传
 func (s *fileService) InitBlockUpload(username, fileHash string, fileSize int) (interface{}, error) {
 	var uploadId string
 	var err error
-	// 1. 通过文件hash判断是否断点续传，并获取uploadID
+	// 1. 通过文件hash判断是否断点续传，并获取uploadId
 	if redis.CheckKey(UploadIdKeyPrefix + fileHash) {
 		uploadId, err = redis.GetString(UploadIdKeyPrefix + fileHash)
 		if err != nil {
@@ -76,10 +76,10 @@ func (s *fileService) InitBlockUpload(username, fileHash string, fileSize int) (
 		for i := 0; i < len(blocks); i += 2 {
 			k := string(blocks[i].([]byte))
 			v := string(blocks[i+1].([]byte))
-			glog.Glog.Info("k:", k, "->v:", v)
+			//glog.Glog.Info("k:", k, "->v:", v)
 			if strings.HasPrefix(k, BlockIndexPrefix) && v == "ok" {
 				// blockIndex_6 -> 6
-				blockIdx, _ := strconv.Atoi(k[len(BlockIndexPrefix)+1:])
+				blockIdx, _ := strconv.Atoi(k[len(BlockIndexPrefix):])
 				completedBlockIdxs = append(completedBlockIdxs, blockIdx)
 			}
 		}
@@ -139,7 +139,7 @@ func (s *fileService) UploadBlock(uploadId, blockHash, blockIndex string, body i
 }
 
 // CompleteUpload : 通知上传合并
-func (s *fileService) CompleteUpload(uploadId, fileHash string) error {
+func (s *fileService) CompleteUpload(uploadId, fileName string) error {
 	// 1. 通过uploadid查询redis并判断是否所有分块上传完成
 	blocks, err := redis.GetHashAll(FileKeyPrefix + uploadId)
 	if err != nil {
@@ -147,9 +147,13 @@ func (s *fileService) CompleteUpload(uploadId, fileHash string) error {
 	}
 	totalCount := 0
 	chunkCount := 0
+	var fileHash string
 	for i := 0; i < len(blocks); i += 2 {
 		k := string(blocks[i].([]byte))
 		v := string(blocks[i+1].([]byte))
+		if k == "fileHash" {
+			fileHash = v
+		}
 		if k == "blockCount" {
 			totalCount, _ = strconv.Atoi(v)
 		} else if strings.HasPrefix(k, BlockIndexPrefix) && v == "ok" {
@@ -161,61 +165,17 @@ func (s *fileService) CompleteUpload(uploadId, fileHash string) error {
 		return errors.New("totalCount != chunkCount")
 	}
 
-	// 4. 合并分块 (备注: 更新于2020/04/01; 此合并逻辑非必须实现，因后期转移到ceph/oss时也可以通过分块方式上传)
-	if mergeSuc := tool.MergeChuncksByShell(BlockDir+uploadId, MergeDir+fileHash, fileHash); !mergeSuc {
+	// 2. 合并分块
+	blockFolder := tool.GetConfigStr("staticPath") + BlockDir + uploadId
+	mergeSavePath := tool.GetConfigStr("staticPath") + MergeDir + fileName
+	os.MkdirAll(path.Dir(mergeSavePath), os.ModePerm)
+	if mergeSuc := tool.MergeChuncksByShell(blockFolder, mergeSavePath, fileHash); !mergeSuc {
 		return errors.New("complete upload failed")
 	}
 
-	// 5. 更新唯一文件表及用户文件表
-	//fsize, _ := strconv.Atoi(fileSize)
-	// 更新于2020-04: 增加fileaddr参数的写入
-	//dblayer.OnFileUploadFinished(filehash, filename, int64(fsize), MergeDir+filehash)
-	//dblayer.OnUserFileUploadFinished(username, filehash, filename, int64(fsize))
-
-	// 更新于2020-04: 删除已上传的分块文件及redis分块信息
-	/*delHashErr := redis.DelKey(UploadIdKeyPrefix + fileHash)
-	delChunkErr := redis.DelKey(FileKeyPrefix + uploadId)
-	if delChunkErr != nil || delHashErr != nil {
-		return errors.New("complete upload part failed")
-	}
-
-	delRes := tool.RemovePathByShell(BlockDir + uploadId)
-	if !delRes {
-		fmt.Printf("Failed to delete chuncks as upload comoleted, uploadID: %s\n", uploadId)
-	}*/
+	// 删除已上传的分块文件及redis分块信息
+	redis.DelKey(UploadIdKeyPrefix + fileHash)
+	redis.DelKey(FileKeyPrefix + uploadId)
+	os.RemoveAll(blockFolder)
 	return nil
 }
-
-// CancelUploadHandler : 文件取消上传接口
-//func CancelUploadHandler(w http.ResponseWriter, r *http.Request) {
-//	// 1. 解析用户请求参数
-//	r.ParseForm()
-//	filehash := r.Form.Get("filehash")
-//
-//	// 2. 获得redis的一个连接
-//	rConn := rPool.RedisPool().Get()
-//	defer rConn.Close()
-//
-//	// 3. 检查uploadID是否存在，如果存在则删除
-//	uploadID, err := redis.String(rConn.Do("GET", HashUpIDKeyPrefix+filehash))
-//	if err != nil || uploadID == "" {
-//		w.Write(util.NewRespMsg(-1, "Cancel upload part failed", nil).JSONBytes())
-//		return
-//	}
-//
-//	_, delHashErr := rConn.Do("DEL", HashUpIDKeyPrefix+filehash)
-//	_, delUploadInfoErr := rConn.Do("DEL", ChunkKeyPrefix+uploadID)
-//	if delHashErr != nil || delUploadInfoErr != nil {
-//		w.Write(util.NewRespMsg(-2, "Cancel upload part failed", nil).JSONBytes())
-//		return
-//	}
-//
-//	// 4. 删除已上传的分块文件
-//	delChkRes := util.RemovePathByShell(ChunkDir + uploadID)
-//	if !delChkRes {
-//		fmt.Printf("Failed to delete chunks as upload canceled, uploadID:%s\n", uploadID)
-//	}
-//
-//	// 5. 响应客户端
-//	w.Write(util.NewRespMsg(0, "OK", nil).JSONBytes())
-//}

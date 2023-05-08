@@ -76,6 +76,7 @@ func RemovePathByShell(destPath string) bool {
 // @return  (string, error): (文件hash, 错误信息)
 func ComputeFileSizeByShell(destPath string) (int, error) {
 	cmdStr := strings.Replace(FileSizeCMD, "$1", destPath, 1)
+	glog.Glog.Info("sizeCmd:", cmdStr)
 	fSizeCmd := exec.Command("bash", "-c", cmdStr)
 	if fSizeStr, err := fSizeCmd.Output(); err != nil {
 		glog.Glog.Error("err:", err)
@@ -95,6 +96,7 @@ func ComputeFileSizeByShell(destPath string) (int, error) {
 // @return  (string, error): (文件hash, 错误信息)
 func ComputeSha1ByShell(destPath string) (string, error) {
 	cmdStr := strings.Replace(FileSha1CMD, "$1", destPath, 1)
+	//glog.Glog.Info("hashCmd:", cmdStr)
 	hashCmd := exec.Command("bash", "-c", cmdStr)
 	if filehash, err := hashCmd.Output(); err != nil {
 		glog.Glog.Error("err:", err)
@@ -111,6 +113,7 @@ func MergeChuncksByShell(chunkDir string, destPath string, fileSha1 string) bool
 	// 合并分块
 	cmdStr := strings.Replace(MergeFileCMD, "$1", chunkDir, 1)
 	cmdStr = strings.Replace(cmdStr, "$2", destPath, 1)
+	glog.Glog.Info("mergeCmd:", cmdStr)
 	mergeCmd := exec.Command("bash", "-c", cmdStr)
 	if _, err := mergeCmd.Output(); err != nil {
 		glog.Glog.Error("err:", err)
@@ -124,8 +127,6 @@ func MergeChuncksByShell(chunkDir string, destPath string, fileSha1 string) bool
 	} else if string(filehash) != fileSha1 { // 判断文件hash是否符合给定值
 		glog.Glog.Info(filehash + " " + fileSha1)
 		return false
-	} else {
-		glog.Glog.Info("check sha1: " + destPath + " " + filehash + " " + fileSha1)
 	}
 	return true
 }
