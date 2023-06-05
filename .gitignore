@@ -18,6 +18,7 @@
 logs/*
 docs/*
 static/*
+conf/*
 docs/swagger.json
 docs/swagger.yaml
 errors.txt

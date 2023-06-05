@@ -6,8 +6,9 @@ type BlockFileUploadInfo struct {
 	FileHash string `json:"fileHash"`
 	FileSize int    `json:"fileSize"`
 	//每一个分块的大小
-	BlockSize  int `json:"blockSize"`
+	BlockSize int `json:"blockSize"`
+	//文件分割成多少个块
 	BlockCount int `json:"blockCount"`
-	// 已经上传完成的分块索引列表
+	//已经上传完成的分块索引列表
 	CompletedBlockIdxs []int `json:"completedBlockIdxs"`
 }

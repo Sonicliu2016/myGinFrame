@@ -12,6 +12,22 @@ type FileController struct {
 }
 
 // @Tags 文件相关
+// @Summary 文件上传
+// @Description 文件上传
+// @Accept  multipart/form-data
+// @Produce json
+// @Param   file  formData file true "文件"
+// @Success 200 {string} Helloworld
+// @Router /file/upload [post]
+func (c *FileController) Upload() (string, error) {
+	fh, err := c.Ctx.FormFile("file")
+	if err != nil {
+		return "", err
+	}
+	return c.Service.Upload(fh)
+}
+
+// @Tags 文件相关
 // @Summary 测试分块上传
 // @Description 测试分块上传
 // @Accept  multipart/form-data

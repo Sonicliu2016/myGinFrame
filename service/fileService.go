@@ -3,8 +3,12 @@ package service
 import (
 	"errors"
 	"fmt"
+	"gopkg.in/amz.v1/s3"
 	"io"
+	"io/ioutil"
 	"math"
+	"mime/multipart"
+	"myGinFrame/ceph"
 	"myGinFrame/glog"
 	"myGinFrame/model"
 	"myGinFrame/mongodb"
@@ -19,6 +23,7 @@ import (
 )
 
 type FileServie interface {
+	Upload(fh *multipart.FileHeader) (string, error)
 	//InitBlockUpload : 初始化分块上传
 	InitBlockUpload(username, fileHash string, fileSize int) (interface{}, error)
 	//UploadBlock : 上传文件分块
@@ -50,6 +55,59 @@ const (
 	FileKeyPrefix    = "file_"
 	BlockIndexPrefix = "blockIndex_"
 )
+
+func (s *fileService) Upload(fh *multipart.FileHeader) (string, error) {
+	file, err := fh.Open()
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	bucket := ceph.GetCephBucket("file")
+	// 创建一个新的bucket
+	if err := bucket.PutBucket(s3.PublicRead); err != nil {
+		glog.Glog.Error("bucket.PutBucket err:", err)
+	}
+	// 查询这个bucket下面指定条件的object keys
+	res, err := bucket.List("", "", "", 100)
+	if err != nil {
+		glog.Glog.Error("bucket list err:", err)
+	} else {
+		glog.Glog.Info("object keys: %+v", res)
+	}
+	// 上传文件
+	cephSavePath := "/ceph/test/"
+	fileBody, err := ioutil.ReadAll(file)
+	if err != nil {
+		glog.Glog.Error("Read file failed, %+v\n", err)
+		return "", err
+	}
+	if err = bucket.Put(cephSavePath, fileBody, "octet-stream", s3.PublicRead); err != nil {
+		glog.Glog.Error("upload file err: %+v\n", err)
+		return "", err
+	}
+
+	// 下载文件B
+	objB, err := bucket.Get(cephSavePath)
+	if err != nil {
+		glog.Glog.Error("Get object B err: %s\n", err.Error())
+		return "", err
+	}
+	tmpFile, err := os.Create(tool.GetConfigStr("staticPath") + "/" + fh.Filename + ".copy")
+	if err != nil {
+		glog.Glog.Error("Write object B to file err: %s\n", err.Error())
+		return "", err
+	}
+	tmpFile.Write(objB)
+
+	// 查询这个bucket下面指定条件的object keys
+	res, err = bucket.List("", "", "", 100)
+	if err != nil {
+		glog.Glog.Error("bucket list err:", err.Error())
+	} else {
+		glog.Glog.Info("object keys:", res)
+	}
+	return cephSavePath, nil
+}
 
 // InitBlockUpload : 初始化分块上传
 func (s *fileService) InitBlockUpload(username, fileHash string, fileSize int) (interface{}, error) {
